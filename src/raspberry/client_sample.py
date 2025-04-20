@@ -12,11 +12,13 @@ import sounddevice as sd
 import numpy as np
 import queue
 import init_process
+import pvrecorder
 
 MQTT_HOST = "broker.vietbot.vn"
 MQTT_PORT = 1883
 MQTT_USER = "admin"
 MQTT_PASS = "vietbot123"
+MIC_ID=0 #Sử dụng script get_mic_id để tìm
 GROUP = "loapay"
 GROUP_NAME = "dev"
 HW_ID = "e45f018959bd"
@@ -39,6 +41,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("Client")
 
+recorder = pvrecorder.PvRecorder(device_index=MIC_ID, frame_length=512)
 client = mqtt.Client()
 client.username_pw_set(MQTT_USER, MQTT_PASS)
 stop_streaming_event = asyncio.Event()
@@ -70,6 +73,7 @@ def on_message(client, userdata, msg):
             elif state == "finish_text_process":
                 logger.info(f"Server finished processing, result: {payload.get('answer')}")
                 global_vars.player.playback(global_vars.SOUND_FINISH, True)
+                recoder.stop()
 
             elif state == "finish_send":
                 logger.info("[Client] Server completed sending TTS.")
@@ -112,7 +116,7 @@ async def process():
     try:
         await publish_state({"state": "start_send", "package_size": PACKET_SIZE})
         while asyncio.get_event_loop().time() - start_time <= RECORD_SECONDS:
-            pcm = recorder.read()[0]
+            pcm = recorder.read()
             frame_bytes = struct.pack('<' + 'h' * len(pcm), *pcm)
             buffer.extend(frame_bytes)
 
