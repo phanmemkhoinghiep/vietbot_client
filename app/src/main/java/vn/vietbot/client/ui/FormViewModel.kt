@@ -56,13 +56,13 @@ class FormViewModel @Inject constructor(
         }
     }
 
-    // 更新 XiaoZhi 配置
+    // Update XiaoZhi config
     fun updateXiaoZhiConfig(updater: XiaoZhiConfig) {
         _formState.update { it.copy(xiaoZhiConfig = updater) }
         validateForm()
     }
 
-    // 更新 WebSocket URL
+    // Update WebSocket URL
     fun updateWebSocketUrl(url: String) {
         _formState.update { it.copy(xiaoZhiConfig = it.xiaoZhiConfig.copy(webSocketUrl = url)) }
         validateForm()
@@ -81,9 +81,9 @@ class FormViewModel @Inject constructor(
                 _uiState.value = UiState.Loading
                 val result = submitFormUseCase(_formState.value)
                 _uiState.value = if (result.isSuccess) {
-                    UiState.Success("提交成功")
+                    UiState.Success("Submit success")
                 } else {
-                    UiState.Error("提交失败")
+                    UiState.Error("Submit failed")
                 }
             }
         }

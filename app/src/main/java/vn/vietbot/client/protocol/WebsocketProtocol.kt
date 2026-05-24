@@ -8,7 +8,7 @@ import okio.ByteString
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-// WebsocketProtocol 实现
+// WebsocketProtocol implementation
 class WebsocketProtocol(private val deviceInfo: DeviceInfo,
                         private val url: String,
                         private val accessToken: String) : Protocol() {
@@ -27,11 +27,11 @@ class WebsocketProtocol(private val deviceInfo: DeviceInfo,
     val helloReceived = CompletableDeferred<Boolean>()
 
     init {
-        sessionId = "your_session_id" // 模拟 session_id，实际从系统获取
+        sessionId = "your_session_id" // Mock session_id, actual from system
     }
 
     override suspend fun start() {
-        // 空实现，与 C++ 一致
+        // Empty implementation, consistent with C++
     }
 
     override suspend fun sendAudio(data: ByteArray) {
@@ -58,10 +58,10 @@ class WebsocketProtocol(private val deviceInfo: DeviceInfo,
     }
 
     override suspend fun openAudioChannel(): Boolean = withContext(Dispatchers.IO) {
-        // 关闭旧连接
+        // Close old connection
         closeAudioChannel()
 
-        // 创建 WebSocket 请求
+        // Create WebSocket request
         val request = Request.Builder()
             .url(url)
             .addHeader("Authorization", "Bearer $accessToken")
@@ -75,7 +75,7 @@ class WebsocketProtocol(private val deviceInfo: DeviceInfo,
             Log.i(TAG, "Header: $name: $value")
         }
 
-        // 初始化 WebSocket
+        // Initialize WebSocket
         websocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 isOpen = true
@@ -84,7 +84,7 @@ class WebsocketProtocol(private val deviceInfo: DeviceInfo,
                     audioChannelStateFlow.emit(AudioState.OPENED)
                 }
 
-                // 发送 Hello 消息
+                // Send Hello message
                 val helloMessage = JSONObject().apply {
                     put("type", "hello")
                     put("version", 1)
@@ -142,10 +142,10 @@ class WebsocketProtocol(private val deviceInfo: DeviceInfo,
                 websocket = null
             }
         })
-        // 防止client在连接建立后立即销毁
+        // Prevent client from being destroyed immediately after connection is established
         // client.dispatcher.executorService.shutdown()
 
-        // 等待服务器 Hello（模拟 C++ 的 xEventGroupWaitBits）
+        // Wait for server Hello (mock C++ xEventGroupWaitBits)
         try {
             withTimeout(10000) {
                 Log.i(TAG, "Waiting for server hello")
@@ -181,12 +181,12 @@ class WebsocketProtocol(private val deviceInfo: DeviceInfo,
         helloReceived.complete(true)
     }
 
-    // 清理资源
+    // Clean up resources
     override fun dispose() {
         scope.cancel()
         closeAudioChannel()
         client.dispatcher.executorService.shutdown()
     }
 
-    private var serverSampleRate: Int = -1 // 模拟 C++ 的成员变量
+    private var serverSampleRate: Int = -1 // Mock C++ member variable
 }

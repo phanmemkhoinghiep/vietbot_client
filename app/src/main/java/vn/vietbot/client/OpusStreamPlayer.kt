@@ -93,7 +93,7 @@ class OpusStreamPlayer(
         while (audioTrack.playState == AudioTrack.PLAYSTATE_PLAYING && audioTrack.playbackHeadPosition != position) {
             Log.i(TAG, "audioTrack.playState: ${audioTrack.playState}, playbackHeadPosition: ${audioTrack.playbackHeadPosition}")
             position = audioTrack.playbackHeadPosition
-            delay(100) // 检查间隔
+            delay(100) // Check interval
         }
     }
 

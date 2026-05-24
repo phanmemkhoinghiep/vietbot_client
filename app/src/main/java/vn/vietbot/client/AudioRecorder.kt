@@ -44,7 +44,7 @@ class AudioRecorder(
             bufferSize
         ).apply {
             if (state == AudioRecord.STATE_INITIALIZED) {
-                // 初始化 AEC
+                // Initialize AEC
                 if (AcousticEchoCanceler.isAvailable()) {
                     aec = AcousticEchoCanceler.create(audioSessionId).apply {
                         enabled = true

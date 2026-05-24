@@ -51,11 +51,11 @@ class Ota @Inject constructor(private val context: Context,
         get() = otaResult?.activation != null
 
 
-    // 升级进度和速度的 Flow
+    // Flow for upgrade progress and speed
     private val _upgradeState = MutableStateFlow(Pair(0, 0L)) // (progress, speed)
     val upgradeState: StateFlow<Pair<Int, Long>> = _upgradeState
 
-    // 设置 HTTP Header
+    // Set HTTP Header
     fun setHeader(key: String, value: String) {
         headers[key] = value
     }
@@ -68,7 +68,7 @@ class Ota @Inject constructor(private val context: Context,
 
 
 
-    // 检查版本
+    // Check version
     suspend fun checkVersion(checkVersionUrl: String,): Boolean = withContext(Dispatchers.IO) {
         Log.i(TAG, "Current version: $currentVersion")
 
@@ -112,19 +112,19 @@ class Ota @Inject constructor(private val context: Context,
         }
     }
 
-    // 解析 JSON 响应
+    // Parse JSON response
     private fun parseJsonResponse(json: JSONObject) {
         // Activation
         otaResult = fromJsonToOtaResult(json)
     }
 
-    // 标记当前版本有效（Android 不直接支持分区，这里模拟）
+    // Mark current version valid (simulated)
     suspend fun markCurrentVersionValid() {
         Log.i(TAG, "Marking current version as valid (Android simulation)")
-        // Android 不需要分区管理，通常由系统验证 APK
+        // Android does not need partition management, system verifies APK
     }
 
-    // 升级固件
+    // Upgrade firmware
     suspend fun upgrade(firmwareUrl: String = this.firmwareUrl) = withContext(Dispatchers.IO) {
         Log.i(TAG, "Upgrading firmware from $firmwareUrl")
 
@@ -162,7 +162,7 @@ class Ota @Inject constructor(private val context: Context,
                 val currentTime = System.currentTimeMillis()
                 if (currentTime - lastCalcTime >= 1000 || read == 0L) {
                     val progress = (totalRead * 100 / contentLength).toInt()
-                    val speed = recentRead * 1000 / (currentTime - lastCalcTime) // 字节/秒
+                    val speed = recentRead * 1000 / (currentTime - lastCalcTime) // bytes/second
                     Log.i(TAG, "Progress: $progress% ($totalRead/$contentLength), Speed: $speed B/s")
                     _upgradeState.emit(Pair(progress, speed))
                     lastCalcTime = currentTime
@@ -173,8 +173,8 @@ class Ota @Inject constructor(private val context: Context,
             sink.close()
             source.close()
 
-            // 验证和安装（Android APK 示例）
-            val downloadedVersion = "1.0.0" // 假设从文件元数据获取，实际需解析
+            // Verify and install (Android APK example)
+            val downloadedVersion = "1.0.0" // Assume from file metadata, actual parsing needed
             if (downloadedVersion == currentVersion) {
                 Log.e(TAG, "Firmware version is the same, skipping upgrade")
                 return@withContext
@@ -182,7 +182,7 @@ class Ota @Inject constructor(private val context: Context,
 
             installFirmware(file)
             Log.i(TAG, "Firmware upgrade successful, restarting app...")
-            delay(3000) // 模拟重启
+            delay(3000) // Simulate restart
             restartApp()
 
         } catch (e: Exception) {
@@ -190,17 +190,17 @@ class Ota @Inject constructor(private val context: Context,
         }
     }
 
-    // 开始升级，带回调
+    // Start upgrade with callback
     suspend fun startUpgrade() {
         upgrade(firmwareUrl)
     }
 
-    // 解析版本号
+    // Parse version number
     private fun parseVersion(version: String): List<Int> {
         return version.split(".").map { it.toInt() }
     }
 
-    // 检查是否有新版本
+    // Check for new version
     private fun isNewVersionAvailable(currentVersion: String, newVersion: String): Boolean {
         val current = parseVersion(currentVersion)
         val newer = parseVersion(newVersion)
@@ -212,7 +212,7 @@ class Ota @Inject constructor(private val context: Context,
         return newer.size > current.size
     }
 
-    // 安装固件（Android APK 示例）
+    // Install firmware (Android APK example)
     private fun installFirmware(file: File) {
         val uri = FileProvider.getUriForFile(
             context,
@@ -229,7 +229,7 @@ class Ota @Inject constructor(private val context: Context,
         context.startActivity(intent)
     }
 
-    // 重启应用
+    // Restart application
     private fun restartApp() {
         val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
         intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)

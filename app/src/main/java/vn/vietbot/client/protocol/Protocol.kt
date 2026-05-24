@@ -8,17 +8,17 @@ import okio.ByteString
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
-// 模拟 Protocol 基类中的枚举和常量
+// Mock Protocol base class enums and constants
 enum class AbortReason { WAKE_WORD_DETECTED, NONE }
 enum class ListeningMode { ALWAYS_ON, AUTO_STOP, MANUAL }
 enum class AudioState { OPENED, CLOSED }
 
-// Protocol 抽象类（对应 C++ 的 Protocol）
+// Protocol abstract class (corresponds to C++ Protocol)
 abstract class Protocol {
-    protected var sessionId: String = "" // 会话 ID
+    protected var sessionId: String = "" // Session ID
     protected val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // 回调改为 Flow
+    // Callbacks changed to Flow
     val incomingJsonFlow = MutableSharedFlow<JSONObject>()
     val incomingAudioFlow = MutableSharedFlow<ByteArray>()
     val audioChannelStateFlow = MutableSharedFlow<AudioState>()

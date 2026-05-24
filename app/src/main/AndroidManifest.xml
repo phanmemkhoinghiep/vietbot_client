@@ -20,14 +20,14 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Voicebotclientandroid"
+        android:theme="@style/Theme.Vietbot"
         android:name=".VApplication"
         tools:targetApi="33">
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.Voicebotclientandroid">
+            android:theme="@style/Theme.Vietbot">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 

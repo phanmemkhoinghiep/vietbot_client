@@ -1,6 +1,6 @@
 package vn.vietbot.client
 
-// UI 状态密封类
+// UI state sealed class
 sealed class UiState {
     object Idle : UiState()
     object Loading : UiState()

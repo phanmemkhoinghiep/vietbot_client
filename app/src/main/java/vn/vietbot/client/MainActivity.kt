@@ -51,7 +51,7 @@ import vn.vietbot.client.ui.ActivationScreen
 import vn.vietbot.client.ui.ChatScreen
 import vn.vietbot.client.ui.MainScreen
 import vn.vietbot.client.ui.ServerFormScreen
-import vn.vietbot.client.ui.theme.VoicebotclientandroidTheme
+import vn.vietbot.client.ui.theme.VietbotTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -82,7 +82,7 @@ class MainActivity : ComponentActivity() {
         }
         enableEdgeToEdge()
         setContent {
-            VoicebotclientandroidTheme {
+            VietbotTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     val activity = LocalContext.current as Activity
                     val entryPoint = EntryPointAccessors.fromActivity(activity, NavigationEntryPoint::class.java)

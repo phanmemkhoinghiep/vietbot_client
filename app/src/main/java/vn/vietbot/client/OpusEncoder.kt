@@ -34,7 +34,7 @@ class OpusEncoder(
             return@withContext null
         }
 
-        val outputBuffer = ByteArray(frameBytes) // 分配足够大的缓冲区
+        val outputBuffer = ByteArray(frameBytes) // Allocate large enough buffer
         val encodedBytes = nativeEncodeBytes(
             nativeEncoderHandle,
             pcmData,
