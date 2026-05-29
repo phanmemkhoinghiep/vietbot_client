@@ -1,5 +1,7 @@
 package vn.vietbot.client.ui
 
+import android.net.Uri
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,7 +18,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.lazy.LazyColumn
+import coil3.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -76,6 +84,16 @@ fun ChatScreen(
 
     val textColor = try { Color(android.graphics.Color.parseColor(textColorHex)) } catch (e: Exception) { Color.Black }
     val bubbleColor = try { Color(android.graphics.Color.parseColor(bubbleColorHex)) } catch (e: Exception) { Color(0xFFE3F2FD) }
+
+    // Device state to emoji mapping (shown when emotion is neutral or during state)
+    val stateEmojiMap = mapOf(
+        "LISTENING" to "🎤",
+        "SPEAKING" to "🔊",
+        "THINKING" to "🤔",
+        "IDLE" to "😴",
+        "CONNECTING" to "🔄"
+    )
+    val stateEmoji: String = stateEmojiMap[deviceState.name] ?: ""
 
     // Emotion to emoji mapping
     val emotionEmojiMap = mapOf(
@@ -176,43 +194,33 @@ fun ChatScreen(
             }
         }
 
-        // Emotion display at top center with bigger emoji
+        // Device state emoji display (compact)
         Box(
-            modifier = Modifier
-                .padding(vertical = 16.dp),
+            modifier = Modifier.padding(vertical = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             when {
                 isConnecting -> {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(64.dp),
-                        strokeWidth = 4.dp,
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                stateEmoji.isNotEmpty() -> {
+                    Text(
+                        text = stateEmoji,
+                        style = TextStyle(fontSize = 24.sp)
                     )
                 }
                 else -> {
                     Text(
                         text = emotionEmojiMap[emotion.lowercase()] ?: "😐",
-                        style = TextStyle(
-                            fontSize = 64.sp,
-                            lineHeight = 64.sp
-                        )
+                        style = TextStyle(fontSize = 24.sp)
                     )
                 }
             }
         }
-
-        // Device State Text
-        Text(
-            text = deviceState.name.lowercase()
-                .replaceFirstChar { it.uppercase() },
-            style = MaterialTheme.typography.bodySmall,
-            color = when (deviceState) {
-                DeviceState.FATAL_ERROR -> MaterialTheme.colorScheme.error
-                else -> MaterialTheme.colorScheme.onSurface
-            },
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
 
         LazyColumn(
             modifier = Modifier
@@ -307,16 +315,10 @@ fun ChatMessageItem(
             Column(
                 modifier = Modifier.padding(12.dp)
             ) {
+                // Filter out content:// URIs from message text
+                val displayMessage = message.message.replace(Regex("content://[\\w./\\-]+"), "")
                 Text(
-                    text = message.sender,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (isCurrentUser)
-                        MaterialTheme.colorScheme.onPrimary
-                    else
-                        textColor
-                )
-                Text(
-                    text = message.message,
+                    text = displayMessage.ifBlank { "" },
                     style = TextStyle(
                         fontFamily = getFontFamily(fontFamily),
                         fontSize = fontSize.sp,
@@ -325,8 +327,37 @@ fun ChatMessageItem(
                         else
                             textColor
                     ),
-                    modifier = Modifier.padding(top = 4.dp)
+                    modifier = Modifier.padding(top = if (displayMessage.isNotBlank()) 0.dp else 0.dp)
                 )
+                // Display image if present (correct aspect ratio, no path text)
+                message.imageUri?.let { uriString ->
+                    AsyncImage(
+                        model = Uri.parse(uriString),
+                        contentDescription = "Camera photo",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                    )
+                }
+                // Display video if present with playback controls
+                message.videoUri?.let { uriString ->
+                    VideoPlayer(
+                        uri = Uri.parse(uriString),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                    )
+                }
+                // Display audio player if present
+                message.audioUri?.let { uriString ->
+                    AudioPlayer(
+                        uri = Uri.parse(uriString),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                    )
+                }
                 if (showTimestamp) {
                     Text(
                         text = message.nowInString,
@@ -340,6 +371,74 @@ fun ChatMessageItem(
                             .align(Alignment.End)
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun VideoPlayer(
+    uri: Uri,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    AndroidView(
+        factory = {
+            android.widget.VideoView(context).apply {
+                setVideoURI(uri)
+                setMediaController(android.widget.MediaController(context).apply {
+                    setAnchorView(this@apply)
+                })
+            }
+        },
+        modifier = modifier.height(200.dp)
+    )
+}
+
+@Composable
+fun AudioPlayer(
+    uri: Uri,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "🎵", style = TextStyle(fontSize = 24.sp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Audio recording",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(
+                onClick = {
+                    try {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, "audio/*")
+                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        // Fallback: play with MediaPlayer
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Link,
+                    contentDescription = "Play audio",
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }

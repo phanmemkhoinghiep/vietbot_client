@@ -75,13 +75,15 @@ fun fromJsonToFirmware(json: JSONObject): Firmware {
 
 data class Activation(
     val code: String,
-    val message: String
+    val message: String,
+    val challenge: String? = null
 )
 
 fun fromJsonToActivation(json: JSONObject): Activation {
     return Activation(
         code = json.getString("code"),
-        message = json.getString("message")
+        message = json.getString("message"),
+        challenge = json.optString("challenge", null)
     )
 }
 

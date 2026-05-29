@@ -12,10 +12,7 @@ import dagger.hilt.components.SingletonComponent
 import vn.vietbot.client.data.SettingsRepository
 import vn.vietbot.client.data.model.DeviceInfo
 import vn.vietbot.client.data.model.DummyDataGenerator
-import vn.vietbot.client.data.model.fromJsonToDeviceInfo
-import vn.vietbot.client.data.model.toJson
 import javax.inject.Singleton
-import androidx.core.content.edit
 import dagger.hilt.EntryPoint
 import dagger.hilt.android.components.ActivityComponent
 import dagger.hilt.android.scopes.ActivityScoped
@@ -56,15 +53,10 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideDeviceInfo(sp: SharedPreferences, context: Context): DeviceInfo {
-        sp.getString("device_id", null)?.let {
-            println(it)
-            return fromJsonToDeviceInfo(it)
-        }?:run {
-            val deviceInfo = DummyDataGenerator.generate(context)
-            sp.edit { putString("device_id", deviceInfo.toJson()) }
-            return deviceInfo
-        }
+    fun provideDeviceInfo(context: Context): DeviceInfo {
+        // Always generate fresh DeviceInfo to get real MAC address
+        // Only cache UUID to maintain session consistency
+        return DummyDataGenerator.generate(context)
     }
 
     @Provides

@@ -7,13 +7,13 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
-// Opus编码器句柄
+// Opus encoder handle
 static OpusEncoder *encoderHandle = nullptr;
 
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_info_dourok_voicebot_OpusEncoder_nativeInitEncoder(JNIEnv *env, jobject thiz,
+Java_vn_vietbot_client_OpusEncoder_nativeInitEncoder(JNIEnv *env, jobject thiz,
                                                         jint sample_rate, jint channels,
                                                         jint application) {
     int error;
@@ -25,14 +25,14 @@ Java_info_dourok_voicebot_OpusEncoder_nativeInitEncoder(JNIEnv *env, jobject thi
     }
 
     opus_encoder_ctl(encoder, OPUS_SET_BITRATE(64000));  // 64 kbps
-    opus_encoder_ctl(encoder, OPUS_SET_COMPLEXITY(10));  // 0-10, 10是最高质量
+    opus_encoder_ctl(encoder, OPUS_SET_COMPLEXITY(10));  // 0-10, 10 is highest quality
 
     LOGI("Opus encoder initialized: sample_rate=%d, channels=%d", sample_rate, channels);
     return (jlong) (intptr_t) encoder;
 }
 
 JNIEXPORT jint JNICALL
-Java_info_dourok_voicebot_OpusEncoder_nativeEncodeBytes(JNIEnv *env, jobject thiz,
+Java_vn_vietbot_client_OpusEncoder_nativeEncodeBytes(JNIEnv *env, jobject thiz,
                                                         jlong encoder_handle,
                                                         jbyteArray input_buffer,
                                                         jint input_size,
@@ -48,7 +48,7 @@ Java_info_dourok_voicebot_OpusEncoder_nativeEncodeBytes(JNIEnv *env, jobject thi
     jbyte *output = env->GetByteArrayElements(output_buffer, nullptr);
 
     opus_int16 *pcm = (opus_int16 *) input;
-    int frame_size = input_size / 2; // 16位samples的数量
+    int frame_size = input_size / 2; // Number of 16-bit samples
 
     int result = opus_encode(encoder, pcm, frame_size,
                              (unsigned char *) output, max_output_size);
@@ -65,7 +65,7 @@ Java_info_dourok_voicebot_OpusEncoder_nativeEncodeBytes(JNIEnv *env, jobject thi
 }
 
 JNIEXPORT void JNICALL
-Java_info_dourok_voicebot_OpusEncoder_nativeReleaseEncoder(JNIEnv *env, jobject thiz,
+Java_vn_vietbot_client_OpusEncoder_nativeReleaseEncoder(JNIEnv *env, jobject thiz,
                                                            jlong encoder_handle) {
     OpusEncoder *encoder = (OpusEncoder *) (intptr_t) encoder_handle;
     if (encoder != nullptr) {

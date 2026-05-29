@@ -1,6 +1,9 @@
 package vn.vietbot.client.data.model
 
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.compose.ui.text.toLowerCase
+import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -192,26 +195,37 @@ object DummyDataGenerator {
     }
 
     private fun getMacAddress(context: android.content.Context): String {
+        // Check for location permission (required for MAC access on Android 10+)
+        val hasLocationPermission = ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        // Try WiFi manager first (only works when WiFi is connected)
         try {
             val wifiManager = context.applicationContext.getSystemService(android.content.Context.WIFI_SERVICE) as android.net.wifi.WifiManager
             val wifiInfo = wifiManager.connectionInfo
             val macAddress = wifiInfo.macAddress
-            if (macAddress != null && macAddress != "02:00:00:00:00:00") {
-                return macAddress
+
+            if (macAddress != null && macAddress != "02:00:00:00:00:00" && macAddress != "00:00:00:00:00:00") {
+                android.util.Log.d("DeviceInfo", "Got MAC from WiFi: $macAddress (hasLocationPermission=$hasLocationPermission)")
+                return macAddress.lowercase()
             }
         } catch (e: Exception) {
-            android.util.Log.e("DeviceInfo", "Failed to get MAC address", e)
+            android.util.Log.e("DeviceInfo", "Failed to get MAC from WiFi", e)
         }
 
-        // Fallback: try to get from network interfaces
+        // Try network interfaces (workaround for some devices)
         try {
             val interfaces = java.net.NetworkInterface.getNetworkInterfaces()
             while (interfaces.hasMoreElements()) {
                 val networkInterface = interfaces.nextElement()
                 if (networkInterface.name.equals("wlan0", ignoreCase = true)) {
                     val mac = networkInterface.hardwareAddress
-                    if (mac != null) {
-                        return mac.joinToString(":") { String.format("%02x", it) }
+                    if (mac != null && mac.isNotEmpty()) {
+                        val macStr = mac.joinToString(":") { String.format("%02x", it) }
+                        android.util.Log.d("DeviceInfo", "Got MAC from network interface: $macStr")
+                        return macStr.lowercase()
                     }
                 }
             }
@@ -219,8 +233,26 @@ object DummyDataGenerator {
             android.util.Log.e("DeviceInfo", "Failed to get MAC from network interface", e)
         }
 
-        // Final fallback: generate random MAC
-        return generateMacAddress()
+        // Final fallback: generate stable MAC based on device serial
+        val stableMac = generateStableMac(context)
+        android.util.Log.w("DeviceInfo", "Using stable generated MAC: $stableMac")
+        return stableMac
+    }
+
+    private fun generateStableMac(context: android.content.Context): String {
+        // Generate deterministic MAC based on device serial to avoid random MAC on each restart
+        val serial = android.os.Build.SERIAL ?: android.os.Build.getSerial() ?: "unknown"
+        val hash = serial.hashCode()
+        val mac = String.format("%02x:%02x:%02x:%02x:%02x:%02x",
+            (hash shr 40 and 0xFF).toInt() or 0x02,  // Set locally administered bit
+            (hash shr 32 and 0xFF).toInt(),
+            (hash shr 24 and 0xFF).toInt(),
+            (hash shr 16 and 0xFF).toInt(),
+            (hash shr 8 and 0xFF).toInt(),
+            (hash and 0xFF).toInt()
+        )
+        android.util.Log.d("DeviceInfo", "Generated stable MAC from serial: $mac")
+        return mac
     }
 
     private fun getDeviceModel(): String {

@@ -12,7 +12,7 @@ static OpusDecoder* decoderHandle = nullptr;
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_info_dourok_voicebot_OpusDecoder_nativeInitDecoder(JNIEnv *env, jobject thiz,
+Java_vn_vietbot_client_OpusDecoder_nativeInitDecoder(JNIEnv *env, jobject thiz,
                                                         jint sample_rate, jint channels) {
     int error;
     OpusDecoder *decoder = opus_decoder_create(sample_rate, channels, &error);
@@ -27,7 +27,7 @@ Java_info_dourok_voicebot_OpusDecoder_nativeInitDecoder(JNIEnv *env, jobject thi
 }
 
 JNIEXPORT jint JNICALL
-Java_info_dourok_voicebot_OpusDecoder_nativeDecodeBytes(JNIEnv *env, jobject thiz,
+Java_vn_vietbot_client_OpusDecoder_nativeDecodeBytes(JNIEnv *env, jobject thiz,
                                                         jlong decoder_handle,
                                                         jbyteArray input_buffer,
                                                         jint input_size,
@@ -54,11 +54,11 @@ Java_info_dourok_voicebot_OpusDecoder_nativeDecodeBytes(JNIEnv *env, jobject thi
         return -1;
     }
 
-    return result * 2; // 返回字节数（每个样本2字节）
+    return result * 2; // Return bytes (2 bytes per sample)
 }
 
 JNIEXPORT void JNICALL
-Java_info_dourok_voicebot_OpusDecoder_nativeReleaseDecoder(JNIEnv *env, jobject thiz,
+Java_vn_vietbot_client_OpusDecoder_nativeReleaseDecoder(JNIEnv *env, jobject thiz,
                                                            jlong decoder_handle) {
     OpusDecoder *decoder = (OpusDecoder*)(intptr_t)decoder_handle;
     if (decoder != nullptr) {

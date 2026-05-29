@@ -85,6 +85,7 @@ dependencies {
     kapt(libs.hilt.android.compiler)
 
     implementation(libs.paho.mqtt.android)
+    implementation("io.coil-kt.coil3:coil-compose:3.0.4")
 
     testImplementation(kotlin("test"))
     testImplementation(libs.json)

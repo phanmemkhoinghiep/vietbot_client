@@ -1,130 +1,134 @@
-      package vn.vietbot.client
+package vn.vietbot.client
 
 import android.Manifest
 import android.app.Activity
-import android.content.Context
 import android.content.pm.PackageManager
-import android.media.AudioManager
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import androidx.navigation.NavController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.android.components.ActivityComponent
-import vn.vietbot.client.data.FormRepository
 import vn.vietbot.client.data.SettingsRepository
-import vn.vietbot.client.ui.ActivationScreen
-import vn.vietbot.client.ui.ChatScreen
+import vn.vietbot.client.ui.ChatViewMode
 import vn.vietbot.client.ui.MainScreen
-import vn.vietbot.client.ui.ServerFormScreen
 import vn.vietbot.client.ui.theme.VietbotTheme
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), LifecycleOwner {
 
+    private val chatViewModel: ChatViewMode by viewModels()
+    private var lifecycleObserver: LifecycleEventObserver? = null
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-//        (getSystemService(AUDIO_SERVICE) as AudioManager).mode = AudioManager.MODE_IN_COMMUNICATION
-        Log.d("MainActivity", "onCreate")
-        if (ActivityCompat.checkSelfPermission(
-                this,
-                Manifest.permission.RECORD_AUDIO
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.RECORD_AUDIO),
-                0
-            )
-        } else {
-            Log.d("MainActivity", "Permission granted")
-        }
-        enableEdgeToEdge()
-        setContent {
-            VietbotTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    val activity = LocalContext.current as Activity
-                    val entryPoint = EntryPointAccessors.fromActivity(activity, NavigationEntryPoint::class.java)
-                    val settingsRepository = entryPoint.getSettingsRepository()
-                    val navigationEvents = entryPoint.getNavigationEvents()
-
-                    MainScreen(
-                        settingsRepository = settingsRepository,
-                        modifier = Modifier.padding(innerPadding)
-                    )
-
-                    LaunchedEffect(navigationEvents) {
-                        navigationEvents.collect { route ->
-                            Log.d("MainActivity", "Navigation event: $route")
-                        }
-                    }
+    // Permission request launcher
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        permissions.forEach { (permission, granted) ->
+            Log.d("MainActivity", "$permission: $granted")
+            if (permission == Manifest.permission.ACCESS_FINE_LOCATION) {
+                if (granted) {
+                    Log.i("MainActivity", "Location permission granted - MAC address can be read")
+                } else {
+                    Log.w("MainActivity", "Location permission denied - MAC address may not be available")
                 }
             }
         }
     }
-}
 
-@Composable
-fun AppNavigation() {
-    val navController = rememberNavController()
-    val activity = LocalContext.current as Activity
-    val entryPoint = EntryPointAccessors.fromActivity(activity, NavigationEntryPoint::class.java)
-    val navigationEvents = entryPoint.getNavigationEvents()
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        Log.d("MainActivity", "onCreate started")
 
+        enableEdgeToEdge()
 
-    Log.d("AppNavigation", "navigationEvents: $navigationEvents")
+        // Request location permission for MAC address access
+        requestLocationPermissionIfNeeded()
 
-    LaunchedEffect(navController) {
-        navigationEvents.collect { route ->
-            navController.navigate(route)
+        // Register lifecycle observer for recording safety
+        registerLifecycleObserver()
+
+        val entryPoint = EntryPointAccessors.fromActivity(this, NavigationEntryPoint::class.java)
+        val settingsRepository = entryPoint.getSettingsRepository()
+
+        setContent {
+            VietbotTheme {
+                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                    MainScreen(
+                        settingsRepository = settingsRepository,
+                        modifier = Modifier.padding(innerPadding)
+                    )
+                }
+            }
+        }
+
+        Log.d("MainActivity", "onCreate finished")
+    }
+
+    private fun registerLifecycleObserver() {
+        lifecycleObserver = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    Log.i("MainActivity", "App going to background")
+                    handleAppBackground()
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    Log.i("MainActivity", "App resumed")
+                }
+                Lifecycle.Event.ON_STOP -> {
+                    Log.i("MainActivity", "App stopped")
+                }
+                else -> { }
+            }
+        }
+        lifecycle?.addObserver(lifecycleObserver!!)
+    }
+
+    private fun handleAppBackground() {
+        // Stop all recording operations immediately
+        val mcpServer = chatViewModel.getMcpServer()
+        mcpServer.stopAllRecordingImmediate()
+        Log.i("MainActivity", "Stopped all recording due to app background")
+
+        // Disconnect WebSocket
+        if (chatViewModel.isConnected.value) {
+            Log.i("MainActivity", "Disconnecting WebSocket due to app background")
+            chatViewModel.disconnect()
+            Toast.makeText(this, "Đã dừng ghi âm/video và ngắt kết nối do ứng dụng chuyển sang nền", Toast.LENGTH_SHORT).show()
         }
     }
 
-    NavHost(navController = navController, startDestination = "form") {
-        composable("form") { ServerFormScreen() }
-        composable("activation") { ActivationScreen() }
-        composable("chat") { ChatScreen() }
+    private fun requestLocationPermissionIfNeeded() {
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                Log.d("MainActivity", "Location permission already granted")
+            }
+            shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_FINE_LOCATION) -> {
+                Log.d("MainActivity", "Showing permission rationale for location")
+                permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+            }
+            else -> {
+                Log.d("MainActivity", "Requesting location permission")
+                permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
+            }
+        }
     }
 }
-
