@@ -3,6 +3,7 @@ package vn.vietbot.client
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -24,6 +25,7 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import vn.vietbot.client.data.SettingsRepository
+import vn.vietbot.client.mcp.GlassesConnectionState
 import vn.vietbot.client.ui.ChatViewMode
 import vn.vietbot.client.ui.MainScreen
 import vn.vietbot.client.ui.theme.VietbotTheme
@@ -59,6 +61,12 @@ class MainActivity : ComponentActivity(), LifecycleOwner {
 
         // Request location permission for MAC address access
         requestLocationPermissionIfNeeded()
+
+        // Request Bluetooth permissions for Android 12+
+        requestBluetoothPermissionsIfNeeded()
+
+        // Initialize HeyCyan Glasses Manager
+        initializeGlassesManager()
 
         // Register lifecycle observer for recording safety
         registerLifecycleObserver()
@@ -129,6 +137,35 @@ class MainActivity : ComponentActivity(), LifecycleOwner {
                 Log.d("MainActivity", "Requesting location permission")
                 permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION))
             }
+        }
+    }
+
+    private fun requestBluetoothPermissionsIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val permissions = arrayOf(
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_SCAN
+            )
+            val notGranted = permissions.filter {
+                ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+            }
+            if (notGranted.isNotEmpty()) {
+                Log.d("MainActivity", "Requesting Bluetooth permissions: $notGranted")
+                permissionLauncher.launch(notGranted.toTypedArray())
+            } else {
+                Log.d("MainActivity", "Bluetooth permissions already granted")
+            }
+        }
+    }
+
+    private fun initializeGlassesManager() {
+        try {
+            val entryPoint = EntryPointAccessors.fromActivity(this, GlassesManagerEntryPoint::class.java)
+            val glassesManager = entryPoint.getHeyCyanGlassesManager()
+            glassesManager.initialize(this)
+            Log.i("MainActivity", "HeyCyanGlassesManager initialized")
+        } catch (e: Exception) {
+            Log.e("MainActivity", "Failed to initialize GlassesManager: ${e.message}")
         }
     }
 }

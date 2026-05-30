@@ -87,6 +87,11 @@ dependencies {
     implementation(libs.paho.mqtt.android)
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
 
+    // HeyCyan Glasses SDK
+    implementation(files("libs/glasses_sdk_20250723_v01.aar"))
+    implementation("com.github.getActivity:XXPermissions:20.0")
+    implementation("org.greenrobot:eventbus:3.2.0")
+
     testImplementation(kotlin("test"))
     testImplementation(libs.json)
 }

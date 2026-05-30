@@ -16,7 +16,10 @@ import java.util.concurrent.atomic.AtomicInteger
  * MCP Server for Android
  * Handles MCP protocol communication and tool execution
  */
-class McpServer(context: Context) {
+class McpServer(
+    context: Context,
+    private val glassesManager: HeyCyanGlassesManager? = null
+) {
 
     companion object {
         private const val TAG = "McpServer"
@@ -25,6 +28,7 @@ class McpServer(context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val cameraTools = CameraMcpTools(context)
+    private val glassesCameraTools: GlassesCameraTools? = glassesManager?.let { GlassesCameraTools(context, it) }
     private val audioTools = AudioMcpTools(context)
     private var requestId = AtomicInteger(1)
 
@@ -75,8 +79,11 @@ class McpServer(context: Context) {
     fun getTools(): List<McpTool> {
         val tools = mutableListOf<McpTool>()
 
-        // Add camera tools
+        // Add camera tools (phone) - always available
         tools.addAll(cameraTools.getTools())
+
+        // Add glasses camera tools if glasses are connected
+        glassesCameraTools?.let { tools.addAll(it.getTools()) }
 
         // Add audio tools
         tools.addAll(audioTools.getTools())
@@ -177,11 +184,16 @@ class McpServer(context: Context) {
 
     /**
      * Execute a tool by name
+     * Routes camera tools to phone or glasses based on settings
      */
     private suspend fun executeTool(toolName: String, args: Map<String, Any>): McpToolResult {
         // Check if it's a camera tool
         if (toolName.startsWith("self.camera.")) {
             val jsonArgs = JSONObject(args.toJsonString())
+            // Route to glasses camera tools if connected, otherwise use phone camera
+            if (glassesCameraTools != null && glassesManager?.connectionState?.value == GlassesConnectionState.CONNECTED) {
+                return glassesCameraTools.executeTool(toolName, jsonArgs)
+            }
             return cameraTools.executeTool(toolName, jsonArgs)
         }
 

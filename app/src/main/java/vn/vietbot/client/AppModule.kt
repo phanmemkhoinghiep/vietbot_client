@@ -10,8 +10,10 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import vn.vietbot.client.data.SettingsRepository
+import vn.vietbot.client.data.SettingsRepositoryImpl
 import vn.vietbot.client.data.model.DeviceInfo
 import vn.vietbot.client.data.model.DummyDataGenerator
+import vn.vietbot.client.mcp.HeyCyanGlassesManager
 import javax.inject.Singleton
 import dagger.hilt.EntryPoint
 import dagger.hilt.android.components.ActivityComponent
@@ -59,6 +61,7 @@ object AppModule {
         return DummyDataGenerator.generate(context)
     }
 
+    
     @Provides
     @Singleton
     @ApplicationScope
@@ -91,6 +94,12 @@ interface NavigationEntryPoint {
     fun getSettingsRepository(): SettingsRepository
 }
 
+@EntryPoint
+@InstallIn(ActivityComponent::class)
+interface GlassesManagerEntryPoint {
+    fun getHeyCyanGlassesManager(): HeyCyanGlassesManager
+}
+
 @Retention(AnnotationRetention.RUNTIME)
 @Qualifier
 annotation class NavigationEvents
@@ -103,3 +112,15 @@ annotation class ApplicationScope
 @Retention(AnnotationRetention.RUNTIME)
 @Qualifier
 annotation class DefaultDispatcher
+
+@Module
+@InstallIn(SingletonComponent::class)
+object GlassesModule {
+    @Provides
+    @Singleton
+    fun provideHeyCyanGlassesManager(
+        settingsRepository: SettingsRepository
+    ): HeyCyanGlassesManager {
+        return HeyCyanGlassesManager(settingsRepository)
+    }
+}

@@ -15,6 +15,7 @@ import vn.vietbot.client.data.SettingsRepository
 import vn.vietbot.client.data.model.DeviceInfo
 import vn.vietbot.client.data.model.TransportType
 import vn.vietbot.client.data.model.toJson
+import vn.vietbot.client.mcp.HeyCyanGlassesManager
 import vn.vietbot.client.mcp.McpServer
 import vn.vietbot.client.mcp.tools.AlarmTool
 import vn.vietbot.client.mcp.tools.AppLauncherTool
@@ -53,7 +54,8 @@ class ChatViewMode @Inject constructor(
     @ApplicationContext private val context: Context,
     @NavigationEvents private val navigationEvents: MutableSharedFlow<String>,
     deviceInfo: DeviceInfo,
-    settings: SettingsRepository
+    settings: SettingsRepository,
+    glassesManager: HeyCyanGlassesManager?
 ) : ViewModel() {
     companion object {
         private const val TAG = "ChatViewModel"
@@ -86,7 +88,7 @@ class ChatViewMode @Inject constructor(
     private var audioJobStarted = false
 
     // MCP Server for device tools
-    private val mcpServer = McpServer(context).apply {
+    private val mcpServer = McpServer(context, glassesManager).apply {
         AlarmTool(context).register(this)
         AppLauncherTool(context).register(this)
         DeviceControlTool(context).register(this)
