@@ -1,0 +1,56 @@
+# Xiaozhi Python Client v2 - Requirements
+# For Raspberry Pi with Whisplay HAT
+# Install with: pip3 install -r requirements.txt
+
+# ==================== Core Dependencies ====================
+
+# WebSocket and HTTP client
+websockets>=12.0
+aiohttp>=3.9.0
+
+# MQTT client (priority protocol)
+paho-mqtt>=2.0.0
+
+# Cryptography (for AES encryption in MQTT audio)
+cryptography>=41.0.0
+
+# Audio processing
+sounddevice>=0.4.6
+numpy>=1.24.0
+
+# Opus audio codec (REQUIRED)
+opuslib>=3.0.0
+
+# Audio resampling (optional)
+# soxr>=0.3.6
+
+# ==================== Raspberry Pi Hardware ====================
+
+# GPIO and hardware control (for Whisplay button)
+RPi.GPIO>=0.7.1
+gpiozero>=1.6.2
+
+# SPI communication (for Whisplay HAT LCD display)
+spidev>=3.5
+
+# ==================== Display ====================
+
+# Image processing for display
+Pillow>=10.0.0
+
+# SVG rendering for emoji icons
+cairosvg>=2.6.0
+tinycss2>=1.1.0
+
+# ==================== Text-to-Speech (for activation code) ====================
+
+gTTS>=2.4.0
+
+# ==================== System Utilities ====================
+
+psutil>=5.9.0
+
+# ==================== Optional ====================
+
+# Pygame (for TTS audio playback)
+pygame>=2.5.0

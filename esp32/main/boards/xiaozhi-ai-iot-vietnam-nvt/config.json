@@ -1,0 +1,15 @@
+{
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "xiaozhi-ai-iot-vietnam-vnt",
+            "sdkconfig_append": [
+                "CONFIG_LCD_ST7789_240X280=y",
+                "CONFIG_SD_CARD_MMC_INTERFACE=y",
+                "CONFIG_FATFS_LFN_HEAP=y",
+                "CONFIG_FATFS_API_ENCODING_UTF_8=y",
+                "CONFIG_FATFS_FS_LOCK=5"
+            ]
+        }
+    ]
+}

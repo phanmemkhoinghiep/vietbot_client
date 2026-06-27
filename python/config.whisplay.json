@@ -1,0 +1,33 @@
+{
+    "server": {
+        "base_url": "https://vietbot.vn",
+        "ota_url": "https://api.tenclass.net/xiaozhi/ota/"
+    },
+    "screen": {
+        "type": "whisplay169",
+        "font_path": "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "brightness": 100
+    },
+    "pipecat": {
+        "server_url": "wss://vietbot.vn/ws",
+        "enabled": true,
+        "auto_connect": false,
+        "reconnect_attempts": 3,
+        "reconnect_delay": 5,
+        "mic_id": null,
+        "audio_id": null
+    },
+    "sound": {
+        "vol_change": "sound/tut_tut.mp3",
+        "start": "sound/start.mp3",
+        "stop": "sound/stop.mp3",
+        "restart": "sound/restart.mp3",
+        "finish": "sound/stop.mp3"
+    },
+    "volume_control": "Master",
+    "volume": 75,
+    "talking_timeout": 30,
+    "logging_type": "INFO",
+    "log_file": "logs/app.log"
+}
+

@@ -1,0 +1,19 @@
+# Build artifacts (per-platform .gitignore inside each subdir handles most)
+*.apk
+*.aab
+*.so
+*.o
+*.obj
+*.class
+*.pyc
+__pycache__/
+.gradle/
+build/
+.idea/
+*.iml
+.DS_Store
+node_modules/
+*.log
+hs_err_pid*.log
+replay_pid*.log
+local.properties

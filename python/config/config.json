@@ -1,0 +1,12 @@
+{
+  "SYSTEM_OPTIONS": {
+    "NETWORK": {
+      "OTA_VERSION_URL": "https://xiaozhi.vietdev.vn/ota/",
+      "WEBSOCKET_URL": null,
+      "WEBSOCKET_ACCESS_TOKEN": null,
+      "MQTT_INFO": null,
+      "ACTIVATION_VERSION": "v2",
+      "AUTHORIZATION_URL": "https://xiaozhi.vietdev.vn/"
+    }
+  }
+}
