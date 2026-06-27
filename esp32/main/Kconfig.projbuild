@@ -120,6 +120,9 @@ choice BOARD_TYPE
     config BOARD_TYPE_XIAOZHI_AI_IOT_VIETNAM_ES3N28P_LCD_2_8
         bool "Xiaozhi AI IoT Vietnam ES3N28P LCD 2.8 inch"
         depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_FREENOVE_ESP32S3_DISPLAY_2_8_LCD
+        bool "Freenove ESP32-S3 Display 2.8 inch LCD"
+        depends on IDF_TARGET_ESP32S3
     config BOARD_TYPE_XIAOZHI_AI_IOT_VIETNAM_DTD
         bool "Xiaozhi AI IoT Vietnam DTD (LCD + SD Card)"
         depends on IDF_TARGET_ESP32S3
