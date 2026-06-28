@@ -11,7 +11,7 @@
  *   • Thread-safe audio feeding from any task.
  *   • Optional periodic callback for ancillary UI updates (e.g., music info).
  *
- * Contributors: Xiaozhi AI-IoT Vietnam Team
+ * Contributors: Vietbot Team
  */
 #pragma once
 

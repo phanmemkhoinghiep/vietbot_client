@@ -17,7 +17,7 @@
  *   • Audio feed methods are thread-safe (called from streaming task).
  *   • All LVGL calls acquire `lvgl_port_lock` internally.
  *
- * Contributors: Xiaozhi AI-IoT Vietnam Team
+ * Contributors: Vietbot Team
  */
 #pragma once
 

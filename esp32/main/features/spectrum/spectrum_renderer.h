@@ -6,7 +6,7 @@
  * frequency-domain bars with a falling-block animation and HSV color cycling.
  * Completely independent of any Display class — only depends on LVGL.
  *
- * Contributors: Xiaozhi AI-IoT Vietnam Team
+ * Contributors: Vietbot Team
  */
 #pragma once
 

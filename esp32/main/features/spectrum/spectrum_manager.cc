@@ -6,7 +6,7 @@
  * FFT analyzer, and refreshes the LVGL bar renderer.  All LVGL access
  * is properly guarded by lvgl_port_lock / lvgl_port_unlock.
  *
- * Contributors: Xiaozhi AI-IoT Vietnam Team
+ * Contributors: Vietbot Team
  */
 #include "spectrum_manager.h"
 

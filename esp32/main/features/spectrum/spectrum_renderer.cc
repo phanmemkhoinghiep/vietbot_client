@@ -7,7 +7,7 @@
  * All pixel operations use direct RGB565 buffer writes for maximum
  * performance on ESP32-S3.
  *
- * Contributors: Xiaozhi AI-IoT Vietnam Team
+ * Contributors: Vietbot Team
  */
 #include "spectrum_renderer.h"
 

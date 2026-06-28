@@ -6,7 +6,7 @@
  * the bar renderer, the FreeRTOS task, and the LVGL canvas layout.
  * All values have sensible defaults for an ESP32-S3 with 320×240 LCD.
  *
- * Contributors: Xiaozhi AI-IoT Vietnam Team
+ * Contributors: Vietbot Team
  */
 #pragma once
 

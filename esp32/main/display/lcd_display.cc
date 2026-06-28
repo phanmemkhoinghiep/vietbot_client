@@ -1,5 +1,5 @@
 /*
-Contributors: Xiaozhi AI-IoT Vietnam Team
+Contributors: Vietbot Team
 */
 
 #include "lcd_display.h"

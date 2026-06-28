@@ -6,7 +6,7 @@
  * The visualizer never directly includes or references any concrete
  * player class (Esp32Music, Esp32Radio, Esp32SdMusic).
  *
- * Contributors: Xiaozhi AI-IoT Vietnam Team
+ * Contributors: Vietbot Team
  */
 
 #include "music_visualizer.h"

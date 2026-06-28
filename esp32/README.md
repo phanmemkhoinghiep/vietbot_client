@@ -12,15 +12,15 @@
 
 ## 🌐 Cộng Đồng & Hỗ Trợ
 
-Tham gia cộng đồng Xiaozhi AI-IoT Vietnam để nhận hỗ trợ, chia sẻ kinh nghiệm và cập nhật tính năng mới:
+Tham gia cộng đồng Vietbot để nhận hỗ trợ, chia sẻ kinh nghiệm và cập nhật tính năng mới:
 
 | Nền tảng | Link | Mô tả |
 |----------|------|-------|
 | 📱 **Website** | [xiaozhi-ai-iot.vn](https://xiaozhi-ai-iot.vn/#) | XiaoZhi AI IoT Việt Nam |
 | 📱 **Zalo** | [Tham gia nhóm](https://zalo.me/g/qlvffa015) | Nhóm hỗ trợ người mới bắt đầu |
 | 📱 **Zalo** | [Tham gia nhóm](https://zalo.me/g/fsyuiz890) | Nhóm hỗ trợ chính thức |
-| 📘 **Facebook** | [Fanpage](https://www.facebook.com/XiaozhiAI.IoTVietnam/) | Xiaozhi AI-IoT Vietnam |
-| 📘 **Facebook** | [Tham gia nhóm](https://www.facebook.com/groups/2655614131443031) | Xiaozhi AI-IoT Vietnam 🇻🇳 | Cộng đồng Chia Sẻ |
+| 📘 **Facebook** | [Fanpage](https://www.facebook.com/XiaozhiAI.IoTVietnam/) | Vietbot |
+| 📘 **Facebook** | [Tham gia nhóm](https://www.facebook.com/groups/2655614131443031) | Vietbot 🇻🇳 | Cộng đồng Chia Sẻ |
 | 🎥 **YouTube** | [Xem hướng dẫn](https://youtu.be/g7Lh-LpxElU) | Video build chi tiết |
 | 🔧 **Web Flasher** | [Nạp ROM Online](https://tienhuyiot.github.io/esp_web_flasher/) | Nạp firmware không cần cài đặt |
 

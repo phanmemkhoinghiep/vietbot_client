@@ -5,7 +5,7 @@
  * Auto-detects display type (LCD / OLED) and renders a QR code
  * on a full-screen LVGL canvas.  Manages its own LVGL lock.
  *
- * Contributors: Xiaozhi AI-IoT Vietnam Team
+ * Contributors: Vietbot Team
  */
 
 #include "qrcode_display.h"

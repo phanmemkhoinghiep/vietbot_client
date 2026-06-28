@@ -6,7 +6,7 @@
  * FFT (dl_rfft_f32), and outputs a power-spectrum array suitable for
  * visualization.  Completely independent of any display or UI code.
  *
- * Contributors: Xiaozhi AI-IoT Vietnam Team
+ * Contributors: Vietbot Team
  */
 #pragma once
 

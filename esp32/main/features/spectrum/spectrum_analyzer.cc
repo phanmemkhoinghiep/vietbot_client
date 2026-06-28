@@ -5,7 +5,7 @@
  * Uses espressif/dl_fft real-FFT (dl_rfft_f32) for efficient single-pass
  * frequency-domain analysis of real-valued PCM audio data.
  *
- * Contributors: Xiaozhi AI-IoT Vietnam Team
+ * Contributors: Vietbot Team
  */
 #include "spectrum_analyzer.h"
 

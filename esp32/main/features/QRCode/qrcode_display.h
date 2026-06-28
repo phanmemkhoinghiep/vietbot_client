@@ -12,7 +12,7 @@
  *   // ... later ...
  *   qr.Clear();
  *
- * Contributors: Xiaozhi AI-IoT Vietnam Team
+ * Contributors: Vietbot Team
  */
 #pragma once
 
