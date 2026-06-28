@@ -376,7 +376,7 @@ bool Ota::CheckVersion(std::string& url) {
         }
         // For testing purposes
         // firmware_version_ = "2.0.4";
-        // firmware_url_ = "https://cdn.jsdelivr.net/gh/TienHuyIoT/esp_web_flasher@master/ota_bin/xingzhi-cube-1.54tft-wifi.bin";
+        // firmware_url_ = "https://cdn.jsdelivr.net/gh/vietbot/esp_web_flasher@master/ota_bin/xingzhi-cube-1.54tft-wifi.bin";
         // has_new_version_ = true;
 
     } else {
