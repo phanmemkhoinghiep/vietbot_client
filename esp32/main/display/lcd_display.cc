@@ -967,6 +967,9 @@ void LcdDisplay::SetupUI() {
     lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_WRAP); // Set to word-wrap mode
     lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0); // Set text alignment to center
     lv_obj_set_style_text_color(chat_message_label_, lvgl_theme->text_color(), 0);
+    // 🔥 FIX (2026-06-26): Ẩn label cũ - wechat style dùng streaming_bubble_ để hiển thị.
+    // Nếu không ẩn, label này sẽ chồng lên streaming_bubble_ gây nhòa (blur).
+    lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
 
     /* Status bar */
     network_label_ = lv_label_create(status_bar_);
@@ -1144,8 +1147,10 @@ void LcdDisplay::SetChatMessage(const char* role, const char* content) {
         lv_label_set_text(streaming_text_, new_text.c_str());
     }
 
-    // Keep chat_message_label_ updated for backward compat (không dùng nữa nhưng an toàn)
-    lv_label_set_text(chat_message_label_, content);
+    // chat_message_label_ đã được ẩn ở SetupUI() - không update ở đây nữa.
+    // Nếu vẫn gọi lv_label_set_text(chat_message_label_, content), sẽ gây:
+    // 1) Chồng text → blur (vì streaming_text_ + chat_message_label_ cùng hiển thị)
+    // 2) Text cũ không bị xóa khi role đổi → hiển thị sai
 }
 #endif
 
