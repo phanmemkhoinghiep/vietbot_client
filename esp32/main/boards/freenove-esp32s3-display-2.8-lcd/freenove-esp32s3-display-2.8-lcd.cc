@@ -233,9 +233,20 @@ public:
     }
 
     virtual bool GetBatteryLevel(int &level, bool& charging, bool& discharging) override {
-        charging = adc_battery_monitor_->IsCharging();
-        discharging = adc_battery_monitor_->IsDischarging();
-        level = adc_battery_monitor_->GetBatteryLevel();
+        // 🔥 FIX (2026-06-28): Freenove board này KHÔNG có pin (chỉ cấp nguồn USB trực tiếp).
+        // Trước đây: AdcBatteryMonitor đọc ADC random + không có charging pin (GPIO_NUM_NC)
+        //   → adc_battery_estimation không có pin thật → return false → discharging=true
+        //   → random ADC value < 20% → icon=BATTERY_EMPTY + discharging=true
+        //   → lvgl_display.cc line 166 hiển thị popup "Pin yếu, vui lòng sạc" mỗi 10s
+        //
+        // Fix: Bỏ qua AdcBatteryMonitor, return giá trị giả:
+        //   - level = 100% (full)
+        //   - charging = true (đang nhận nguồn USB)
+        //   - discharging = false
+        // → Icon BATTERY_FULL + charging → KHÔNG bao giờ hiển thị low battery popup
+        level = 100;
+        charging = true;
+        discharging = false;
         return true;
     }
 };
