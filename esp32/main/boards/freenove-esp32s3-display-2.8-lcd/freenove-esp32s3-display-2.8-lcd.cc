@@ -23,7 +23,7 @@
 #include "system_reset.h"
 #include "esp_lcd_ili9341.h"
 
-#define TAG "FreenoveESP32S3Display"
+#define TAG "vietbot_esp32s3_display"
 
 class TouchDriver {
 public:
@@ -60,7 +60,7 @@ private:
     i2c_master_dev_handle_t dev_;
 };
 
-class FreenoveESP32S3Display : public WifiBoard {
+class vietbot_esp32s3_display : public WifiBoard {
 private:
     Button boot_button_;
     LcdDisplay *display_;
@@ -73,7 +73,7 @@ private:
     }
 
     static void TouchTask(void *arg) {
-        auto *self = static_cast<FreenoveESP32S3Display*>(arg);
+        auto *self = static_cast<vietbot_esp32s3_display*>(arg);
         auto &app = Application::GetInstance();
 
         uint32_t last_tap = 0;
@@ -200,7 +200,7 @@ private:
     }
 
 public:
-    FreenoveESP32S3Display(): boot_button_(BOOT_BUTTON_GPIO)
+    vietbot_esp32s3_display(): boot_button_(BOOT_BUTTON_GPIO)
     {
         InitializeI2c();
         InitializeBatteryMonitor();
@@ -240,4 +240,4 @@ public:
     }
 };
 
-DECLARE_BOARD(FreenoveESP32S3Display);
+DECLARE_BOARD(vietbot_esp32s3_display);
