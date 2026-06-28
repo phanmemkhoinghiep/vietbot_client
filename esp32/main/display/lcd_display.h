@@ -43,13 +43,6 @@ protected:
     std::unique_ptr<LvglGif> gif_controller_ = nullptr;
     lv_obj_t* emoji_box_ = nullptr;
     lv_obj_t* chat_message_label_ = nullptr;
-    // 🔥 NEW (2026-06-26): Hybrid chat streaming - bubble + text gom vào 1 bubble
-    // - streaming_bubble_: bubble hiện đang streaming (TTS hoặc STT)
-    // - streaming_role_: "user" / "assistant" / "system" của bubble hiện tại
-    // - Reset khi role đổi (user → assistant → user) hoặc bubble final
-    lv_obj_t* streaming_bubble_ = nullptr;
-    lv_obj_t* streaming_text_ = nullptr;
-    char streaming_role_[16] = {0};
     esp_timer_handle_t preview_timer_ = nullptr;
     std::unique_ptr<LvglImage> preview_image_cached_ = nullptr;
 

@@ -263,9 +263,9 @@ SpiLcdDisplay::SpiLcdDisplay(esp_lcd_panel_io_handle_t panel_io, esp_lcd_panel_h
         .io_handle = panel_io_,
         .panel_handle = panel_,
         .control_handle = nullptr,
-        .buffer_size = static_cast<uint32_t>(width_ * 40),
+        .buffer_size = static_cast<uint32_t>(width_ * 20),
         .double_buffer = true,
-        .trans_size = 40,
+        .trans_size = 20,
         .hres = static_cast<uint32_t>(width_),
         .vres = static_cast<uint32_t>(height_),
         .monochrome = false,
@@ -967,9 +967,6 @@ void LcdDisplay::SetupUI() {
     lv_label_set_long_mode(chat_message_label_, LV_LABEL_LONG_WRAP); // Set to word-wrap mode
     lv_obj_set_style_text_align(chat_message_label_, LV_TEXT_ALIGN_CENTER, 0); // Set text alignment to center
     lv_obj_set_style_text_color(chat_message_label_, lvgl_theme->text_color(), 0);
-    // 🔥 FIX (2026-06-26): Ẩn label cũ - wechat style dùng streaming_bubble_ để hiển thị.
-    // Nếu không ẩn, label này sẽ chồng lên streaming_bubble_ gây nhòa (blur).
-    lv_obj_add_flag(chat_message_label_, LV_OBJ_FLAG_HIDDEN);
 
     /* Status bar */
     network_label_ = lv_label_create(status_bar_);
@@ -1066,91 +1063,10 @@ void LcdDisplay::SetPreviewImage(std::unique_ptr<LvglImage> image) {
 
 void LcdDisplay::SetChatMessage(const char* role, const char* content) {
     DisplayLockGuard lock(this);
-    if (chat_message_label_ == nullptr || content_ == nullptr) {
+    if (chat_message_label_ == nullptr) {
         return;
     }
-    if (content == nullptr || strlen(content) == 0) {
-        // Empty content → reset streaming state (finalize previous bubble)
-        streaming_bubble_ = nullptr;
-        streaming_text_ = nullptr;
-        streaming_role_[0] = '\0';
-        lv_label_set_text(chat_message_label_, "");
-        return;
-    }
-
-    // 🔥 NEW (2026-06-26): Hybrid chat streaming - giống Android app
-    // - Gom các sentence_start/STT chunks vào cùng 1 bubble
-    // - Wrap text tự nhiên theo width màn hình
-    // - Reset bubble khi role đổi (user ↔ assistant)
-
-    // Nếu role đổi (user → assistant hoặc ngược lại) → finalize bubble cũ, tạo bubble mới
-    bool role_changed = (streaming_role_[0] == '\0') ||
-                        (strcmp(streaming_role_, role) != 0);
-
-    if (role_changed || streaming_bubble_ == nullptr) {
-        // Finalize bubble cũ (nếu có)
-        streaming_bubble_ = nullptr;
-        streaming_text_ = nullptr;
-
-        // Tạo bubble mới
-        auto lvgl_theme = static_cast<LvglTheme*>(current_theme_);
-        auto text_font = lvgl_theme->text_font()->font();
-
-        // Bubble container
-        streaming_bubble_ = lv_obj_create(content_);
-        lv_obj_set_style_radius(streaming_bubble_, 8, 0);
-        lv_obj_set_scrollbar_mode(streaming_bubble_, LV_SCROLLBAR_MODE_OFF);
-        lv_obj_set_style_border_width(streaming_bubble_, 0, 0);
-        lv_obj_set_style_pad_all(streaming_bubble_, lvgl_theme->spacing(4), 0);
-        lv_obj_set_width(streaming_bubble_, LV_SIZE_CONTENT);
-        lv_obj_set_height(streaming_bubble_, LV_SIZE_CONTENT);
-
-        // Text label trong bubble
-        streaming_text_ = lv_label_create(streaming_bubble_);
-        lv_label_set_text(streaming_text_, content);
-        lv_label_set_long_mode(streaming_text_, LV_LABEL_LONG_WRAP);
-
-        // Tính max width = 85% screen
-        lv_coord_t max_width = LV_HOR_RES * 85 / 100 - 16;
-        lv_obj_set_width(streaming_text_, max_width);
-
-        // Set màu theo role
-        if (strcmp(role, "user") == 0) {
-            lv_obj_set_style_bg_color(streaming_bubble_, lvgl_theme->user_bubble_color(), 0);
-            lv_obj_set_style_text_color(streaming_text_, lvgl_theme->text_color(), 0);
-        } else if (strcmp(role, "assistant") == 0) {
-            lv_obj_set_style_bg_color(streaming_bubble_, lvgl_theme->assistant_bubble_color(), 0);
-            lv_obj_set_style_text_color(streaming_text_, lvgl_theme->text_color(), 0);
-        } else {
-            lv_obj_set_style_bg_color(streaming_bubble_, lvgl_theme->system_bubble_color(), 0);
-            lv_obj_set_style_text_color(streaming_text_, lvgl_theme->system_text_color(), 0);
-        }
-        lv_obj_set_style_bg_opa(streaming_bubble_, LV_OPA_70, 0);
-
-        // Lưu role
-        strncpy(streaming_role_, role, sizeof(streaming_role_) - 1);
-        streaming_role_[sizeof(streaming_role_) - 1] = '\0';
-
-        // Scroll to bottom
-        lv_obj_scroll_to_view_recursive(streaming_bubble_, LV_ANIM_OFF);
-    } else {
-        // Cùng role → APPEND text vào bubble hiện tại (giống Android appendTtsText)
-        // Thêm space trước nếu text cũ không kết thúc bằng space
-        const char* current_text = lv_label_get_text(streaming_text_);
-        std::string new_text;
-        if (current_text && strlen(current_text) > 0 &&
-            current_text[strlen(current_text) - 1] != ' ' && content[0] != ' ') {
-            new_text = std::string(current_text) + " " + content;
-        } else {
-            new_text = std::string(current_text ? current_text : "") + content;
-        }
-        lv_label_set_text(streaming_text_, new_text.c_str());
-    }
-
-    // chat_message_label_ đã được ẩn ở SetupUI() - không update ở đây nữa.
-    // Nếu vẫn gọi lv_label_set_text(chat_message_label_, content), sẽ gây:
-    // 1) Chồng text → blur (vì streaming_text_ + chat_message_label_ cùng hiển thị)
-    // 2) Text cũ không bị xóa khi role đổi → hiển thị sai
+    lv_label_set_text(chat_message_label_, content);
 }
 #endif
 
