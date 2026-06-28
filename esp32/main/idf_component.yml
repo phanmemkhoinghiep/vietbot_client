@@ -29,7 +29,7 @@ dependencies:
   78/esp_lcd_nv3023: ~1.0.0
   TienHuyIoT_esp-wifi-connect:
     git: https://github.com/phanmemkhoinghiep/esp-wifi-connect.git
-    version: "v1.0.0"
+    version: "v1.0.2"
   TienHuyIoT_esp_lcd_touch_xpt2046:
     git: https://github.com/TienHuyIoT/esp_lcd_touch_xpt2046.git
     version: "v1.0.7"
