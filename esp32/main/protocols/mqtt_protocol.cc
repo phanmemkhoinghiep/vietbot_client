@@ -20,8 +20,11 @@ MqttProtocol::MqttProtocol() {
             auto& app = Application::GetInstance();
             if (app.GetDeviceState() == kDeviceStateIdle) {
                 ESP_LOGI(TAG, "Reconnecting to MQTT server");
-                app.Schedule([protocol]() {
-                    protocol->StartMqttClient(false);
+                auto alive = protocol->alive_;  // Capture alive flag
+                app.Schedule([protocol, alive]() {
+                    if (*alive) {
+                        protocol->StartMqttClient(false);
+                    }
                 });
             }
         },
@@ -32,6 +35,10 @@ MqttProtocol::MqttProtocol() {
 
 MqttProtocol::~MqttProtocol() {
     ESP_LOGI(TAG, "MqttProtocol deinit");
+    
+    // Mark as dead first to prevent any pending scheduled tasks from executing
+    *alive_ = false;
+    
     if (reconnect_timer_ != nullptr) {
         esp_timer_stop(reconnect_timer_);
         esp_timer_delete(reconnect_timer_);
@@ -107,10 +114,14 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
             ParseServerHello(root);
         } else if (strcmp(type->valuestring, "goodbye") == 0) {
             auto session_id = cJSON_GetObjectItem(root, "session_id");
-            ESP_LOGI(TAG, "Received goodbye message, session_id: %s", session_id ? session_id->valuestring : "null");
-            if (session_id == nullptr || session_id_ == session_id->valuestring) {
-                Application::GetInstance().Schedule([this]() {
-                    CloseAudioChannel();
+            ESP_LOGI(TAG, "Received goodbye message, session_id: %s", cJSON_IsString(session_id) ? session_id->valuestring : "null");
+            if (cJSON_IsString(session_id) && session_id_ == session_id->valuestring) {
+                auto alive = alive_;  // Capture alive flag
+                Application::GetInstance().Schedule([this, alive]() {
+                    if (*alive) {
+                        // Server initiated goodbye, don't send goodbye back to avoid ping-pong
+                        CloseAudioChannel(false);
+                    }
                 });
             }
         } else if (on_incoming_json_ != nullptr) {
@@ -131,7 +142,7 @@ bool MqttProtocol::StartMqttClient(bool report_error) {
         broker_address = endpoint;
     }
     if (!mqtt_->Connect(broker_address, broker_port, client_id, username, password)) {
-        ESP_LOGE(TAG, "Failed to connect to endpoint");
+        ESP_LOGE(TAG, "Failed to connect to endpoint, code=%d", mqtt_->GetLastError());
         SetError(Lang::Strings::SERVER_NOT_CONNECTED);
         return false;
     }
@@ -178,17 +189,23 @@ bool MqttProtocol::SendAudio(std::unique_ptr<AudioStreamPacket> packet) {
     return udp_->Send(encrypted) > 0;
 }
 
-void MqttProtocol::CloseAudioChannel() {
+void MqttProtocol::CloseAudioChannel(bool send_goodbye) {
     {
         std::lock_guard<std::mutex> lock(channel_mutex_);
         udp_.reset();
     }
 
-    std::string message = "{";
-    message += "\"session_id\":\"" + session_id_ + "\",";
-    message += "\"type\":\"goodbye\"";
-    message += "}";
-    SendText(message);
+    ESP_LOGI(TAG, "Closing audio channel, send_goodbye: %d", send_goodbye);
+
+    // Only send goodbye when client initiates the close
+    // Don't send if server already sent goodbye (to avoid ping-pong)
+    if (send_goodbye) {
+        std::string message = "{";
+        message += "\"session_id\":\"" + session_id_ + "\",";
+        message += "\"type\":\"goodbye\"";
+        message += "}";
+        SendText(message);
+    }
 
     if (on_audio_channel_closed_ != nullptr) {
         on_audio_channel_closed_();
@@ -325,26 +342,6 @@ void MqttProtocol::ParseServerHello(const cJSON* root) {
         auto frame_duration = cJSON_GetObjectItem(audio_params, "frame_duration");
         if (cJSON_IsNumber(frame_duration)) {
             server_frame_duration_ = frame_duration->valueint;
-        }
-        // 🔥 NEW (2026-06-26): Parse listening_mode từ server hello response
-        // - "realtime" → kListeningModeRealtime (continuous streaming, AEC Off, cho mode 3 translation)
-        // - "auto_stop" → kListeningModeAutoStop (turn-based, AEC On, cho mode 1/2 Q&A)
-        // - Field không tồn tại → giữ default kListeningModeAutoStop (backward compatible)
-        auto listening_mode_item = cJSON_GetObjectItem(audio_params, "listening_mode");
-        if (cJSON_IsString(listening_mode_item)) {
-            std::string mode_str = listening_mode_item->valuestring;
-            if (mode_str == "realtime") {
-                listening_mode_ = kListeningModeRealtime;
-                ESP_LOGI(TAG, "🎧 listening_mode=realtime (continuous streaming, AEC Off)");
-            } else if (mode_str == "auto_stop") {
-                listening_mode_ = kListeningModeAutoStop;
-                ESP_LOGI(TAG, "🎧 listening_mode=auto_stop (turn-based, AEC On)");
-            } else if (mode_str == "manual") {
-                listening_mode_ = kListeningModeManualStop;
-                ESP_LOGI(TAG, "🎧 listening_mode=manual (manual stop)");
-            } else {
-                ESP_LOGW(TAG, "Unknown listening_mode: %s, keeping default (auto_stop)", mode_str.c_str());
-            }
         }
     }
 

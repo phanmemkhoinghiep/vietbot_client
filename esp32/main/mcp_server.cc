@@ -33,7 +33,7 @@ McpServer::~McpServer() {
 void McpServer::AddCommonTools() {
     // *Important* To speed up the response time, we add the common tools to the beginning of
     // the tools list to utilize the prompt cache.
-    // **Important** To improve response speed, we place commonly used tools at the beginning to leverage the prompt cache feature.
+    // **重要** 为了提升响应速度，我们把常用的工具放在前面，利用 prompt cache 的特性。
 
     // Backup the original tools list and restore it after adding the common tools.
     auto original_tools = std::move(tools_);
@@ -43,28 +43,14 @@ void McpServer::AddCommonTools() {
     // Custom tools must be added in the board's InitializeTools function.
 
     AddTool("self.get_device_status",
-            "Provides the real-time information of the device...\n"
-            "\n"
-            "=== MANDATORY BEHAVIOR RULES (ALWAYS FOLLOW) ===\n"
-            "1. WHEN UNABLE TO HEAR CLEARLY / INPUT IS UNCLEAR:\n"
-            "   If the user's question/command is unclear, too short,\n"
-            "   or cannot be understood,\n"
-            "   AI MUST respond with exactly one of these sentences and do nothing else:\n"
-            "   \"Sorry, I didn't catch that clearly. Could you please say it again?\"\n"
-            "   DO NOT guess, DO NOT answer other content on your own.\n"
-            "\n"
-            "2. WHEN DETECTING SPAM / ADVERTISING / SUBSCRIPTION REQUESTS:\n"
-            "   If the user mentions requesting subscriptions, likes, shares of channels,\n"
-            "   product advertising, or content unrelated to the assistant:\n"
-            "   AI MUST decline with exactly this sentence:\n"
-            "   \"Sorry, I didn't catch that clearly. Could you please say it again?\"\n"
-            "   DO NOT provide lengthy explanations, DO NOT suggest rephrasing, DO NOT use other sentences.\n"
-            "=================================================",
-            PropertyList(),
-            [&board](const PropertyList &properties) -> ReturnValue
-            {
-                return board.GetDeviceStatusJson();
-            });
+        "Provides the real-time information of the device, including the current status of the audio speaker, screen, battery, network, etc.\n"
+        "Use this tool for: \n"
+        "1. Answering questions about current condition (e.g. what is the current volume of the audio speaker?)\n"
+        "2. As the first step to control the device (e.g. turn up / down the volume of the audio speaker, etc.)",
+        PropertyList(),
+        [&board](const PropertyList& properties) -> ReturnValue {
+            return board.GetDeviceStatusJson();
+        });
 
     AddTool("self.audio_speaker.set_volume", 
         "Set the volume of the audio speaker. If the current volume is unknown, you must call `self.get_device_status` tool first and then call this tool.",
@@ -109,26 +95,12 @@ void McpServer::AddCommonTools() {
                 }
                 return false;
             });
-            
-        // Rotation display tool
-        AddTool("self.screen.set_rotation",
-            "Set the rotation of the screen display. The rotation can be 0, 90 or left, 180 of flip, 270 or right degrees.",
-            PropertyList({
-                Property("rotation_degree", kPropertyTypeInteger, 0, 270)
-            }),
-            [display](const PropertyList& properties) -> ReturnValue {
-                int rotation_degree = properties["rotation_degree"].value<int>();
-                if (rotation_degree == 0 || rotation_degree == 90 || rotation_degree == 180 || rotation_degree == 270) {
-                    return display->SetRotation(rotation_degree, true);
-                }
-                return false;
-            });  
     }
 
     auto camera = board.GetCamera();
     if (camera) {
         AddTool("self.camera.take_photo",
-            "Take a photo and explain it. Use this tool after the user asks you to see something.\n"
+            "Always remember you have a camera. If the user asks you to see something, use this tool to take a photo and then explain it.\n"
             "Args:\n"
             "  `question`: The question that you want to ask about the photo.\n"
             "Return:\n"
@@ -148,7 +120,7 @@ void McpServer::AddCommonTools() {
             });
     }
 #endif
-    
+
     // Restore the original tools list to the end of the tools list
     tools_.insert(tools_.end(), original_tools.begin(), original_tools.end());
 }
@@ -187,9 +159,7 @@ void McpServer::AddUserOnlyTools() {
             
             auto& app = Application::GetInstance();
             app.Schedule([url, &app]() {
-                auto ota = std::make_unique<Ota>();
-                
-                bool success = app.UpgradeFirmware(*ota, url);
+                bool success = app.UpgradeFirmware(url);
                 if (!success) {
                     ESP_LOGE(TAG, "Firmware upgrade failed");
                 }
@@ -314,10 +284,8 @@ void McpServer::AddUserOnlyTools() {
     }
 #endif // HAVE_LVGL
 
-    // Assets download url
-    auto& assets = Assets::GetInstance();
-    if (assets.partition_valid()) {
-        AddUserOnlyTool("self.assets.set_download_url", "Set the download url for the assets",
+    // Assets download url (always registered — Settings storage works regardless of partition layout)
+    AddUserOnlyTool("self.assets.set_download_url", "Set the download url for the assets",
             PropertyList({
                 Property("url", kPropertyTypeString)
             }),
@@ -327,7 +295,6 @@ void McpServer::AddUserOnlyTools() {
                 settings.SetString("download_url", url);
                 return true;
             });
-    }
 }
 
 void McpServer::AddTool(McpTool* tool) {

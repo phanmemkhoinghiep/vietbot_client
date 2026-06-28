@@ -1,78 +1,77 @@
-# Tài liệu giao thức truyền thông hỗn hợp MQTT + UDP
+# MQTT + UDP Hybrid Communication Protocol
 
-（Tiếng Việt | [中文](mqtt-udp_zh.md)）
-
-Tài liệu giao thức truyền thông hỗn hợp MQTT + UDP được tổng hợp dựa trên triển khai mã nguồn, mô tả cách thiết bị và server tương tác thông qua MQTT để truyền tải tin nhắn điều khiển, thông qua UDP để truyền tải dữ liệu âm thanh.
+This document describes the MQTT + UDP hybrid protocol used between the device and the server, based on the current implementation: MQTT carries control messages, UDP carries real-time audio.
 
 ---
 
-## 1. Tổng quan giao thức
+## 1. Overview
 
-Giao thức này sử dụng phương thức truyền tải hỗn hợp:
-- **MQTT**: Dùng cho tin nhắn điều khiển, đồng bộ trạng thái, trao đổi dữ liệu JSON
-- **UDP**: Dùng cho truyền tải dữ liệu âm thanh thời gian thực, hỗ trợ mã hóa
+The protocol uses two channels:
 
-### 1.1 Đặc điểm giao thức
+- **MQTT** - control messages, state synchronization, JSON payloads.
+- **UDP** - real-time audio, encrypted.
 
-- **Thiết kế hai kênh**: Tách biệt điều khiển và dữ liệu, đảm bảo tính thời gian thực
-- **Truyền tải mã hóa**: Dữ liệu âm thanh UDP sử dụng mã hóa AES-CTR
-- **Bảo vệ số thứ tự**: Ngăn chặn replay và data packet bị sai thứ tự
-- **Tự động kết nối lại**: Tự động kết nối lại khi kết nối MQTT bị ngắt
+### 1.1 Key characteristics
+
+- **Dual channel design** - control is separated from data so audio has low latency.
+- **Encrypted transport** - UDP audio is encrypted with AES-CTR.
+- **Sequence numbers** - guard against replay and reordering.
+- **Automatic reconnect** - MQTT reconnects on disconnect.
 
 ---
 
-## 2. Tổng quan quy trình chung
+## 2. End-to-end Flow
 
 ```mermaid
 sequenceDiagram
-    participant Device as ESP32 Thiết bị
-    participant MQTT as MQTT Server
-    participant UDP as UDP Server
+    participant Device as ESP32 device
+    participant MQTT as MQTT broker
+    participant UDP as UDP server
 
-    Note over Device, UDP: 1. Thiết lập kết nối MQTT
+    Note over Device, UDP: 1. Establish MQTT connection
     Device->>MQTT: MQTT Connect
     MQTT->>Device: Connected
 
-    Note over Device, UDP: 2. Yêu cầu kênh âm thanh
-    Device->>MQTT: Hello Message (type: "hello", transport: "udp")
-    MQTT->>Device: Hello Response (Thông tin kết nối UDP + Khóa mã hóa)
+    Note over Device, UDP: 2. Request audio channel
+    Device->>MQTT: Hello message (type: "hello", transport: "udp")
+    MQTT->>Device: Hello response (UDP endpoint + encryption keys)
 
-    Note over Device, UDP: 3. Thiết lập kết nối UDP
+    Note over Device, UDP: 3. Establish UDP connection
     Device->>UDP: UDP Connect
     UDP->>Device: Connected
 
-    Note over Device, UDP: 4. Truyền tải dữ liệu âm thanh
-    loop Truyền stream âm thanh
-        Device->>UDP: Dữ liệu âm thanh mã hóa (Opus)
-        UDP->>Device: Dữ liệu âm thanh mã hóa (Opus)
+    Note over Device, UDP: 4. Audio streaming
+    loop Audio stream
+        Device->>UDP: Encrypted audio (Opus)
+        UDP->>Device: Encrypted audio (Opus)
     end
 
-    Note over Device, UDP: 5. Trao đổi tin nhắn điều khiển
-    par Tin nhắn điều khiển
-        Device->>MQTT: Tin nhắn Listen/TTS/MCP
-        MQTT->>Device: Phản hồi STT/TTS/MCP
+    Note over Device, UDP: 5. Control messages
+    par Control
+        Device->>MQTT: Listen / TTS / MCP messages
+        MQTT->>Device: STT / TTS / MCP / Alert responses
     end
 
-    Note over Device, UDP: 6. Đóng kết nối
-    Device->>MQTT: Goodbye Message
+    Note over Device, UDP: 6. Teardown
+    Device->>MQTT: Goodbye
     Device->>UDP: Disconnect
 ```
 
 ---
 
-## 3. Kênh điều khiển MQTT
+## 3. MQTT Control Channel
 
-### 3.1 Thiết lập kết nối
+### 3.1 Connection
 
-Thiết bị kết nối đến server thông qua MQTT, tham số kết nối bao gồm:
-- **Endpoint**: Địa chỉ và port của MQTT server
-- **Client ID**: Định danh duy nhất của thiết bị
-- **Username/Password**: Thông tin xác thực
-- **Keep Alive**: Khoảng thời gian heartbeat (mặc định 240 giây)
+The device connects to the broker using:
+- **Endpoint** - broker host and port.
+- **Client ID** - device identifier.
+- **Username / Password** - credentials.
+- **Keep Alive** - heartbeat interval (default 240 s).
 
-### 3.2 Trao đổi tin nhắn Hello
+### 3.2 Hello exchange
 
-#### 3.2.1 Thiết bị gửi Hello
+#### 3.2.1 Device -> Server
 
 ```json
 {
@@ -80,7 +79,8 @@ Thiết bị kết nối đến server thông qua MQTT, tham số kết nối ba
   "version": 3,
   "transport": "udp",
   "features": {
-    "mcp": true
+    "mcp": true,
+    "aec": true
   },
   "audio_params": {
     "format": "opus",
@@ -91,7 +91,9 @@ Thiết bị kết nối đến server thông qua MQTT, tham số kết nối ba
 }
 ```
 
-#### 3.2.2 Server phản hồi Hello
+`features.mcp` is always set; `features.aec` is set when `CONFIG_USE_SERVER_AEC` is enabled.
+
+#### 3.2.2 Server -> Device
 
 ```json
 {
@@ -100,320 +102,308 @@ Thiết bị kết nối đến server thông qua MQTT, tham số kết nối ba
   "session_id": "xxx",
   "audio_params": {
     "format": "opus",
-    "sample_rate": 16000,
+    "sample_rate": 24000,
     "channels": 1,
     "frame_duration": 60
   },
-  "udp_config": {
-    "host": "192.168.1.100",
-    "port": 8080,
-    "encryption": {
-      "algorithm": "aes-ctr",
-      "key": "base64_encoded_key",
-      "iv": "base64_encoded_iv"
-    }
+  "udp": {
+    "server": "192.168.1.100",
+    "port": 8888,
+    "key": "0123456789ABCDEF0123456789ABCDEF",
+    "nonce": "0123456789ABCDEF0123456789ABCDEF"
   }
 }
 ```
 
-### 3.3 Các loại tin nhắn JSON
+Field reference:
+- `udp.server` - UDP server address.
+- `udp.port` - UDP server port.
+- `udp.key` - AES key, hex-encoded.
+- `udp.nonce` - AES nonce, hex-encoded.
 
-#### 3.3.1 Thiết bị → Server
+### 3.3 JSON message types
 
-**Tin nhắn trạng thái thiết bị**
+#### 3.3.1 Device -> Server
+
+1. **Listen**
+   ```json
+   {
+     "session_id": "xxx",
+     "type": "listen",
+     "state": "start",
+     "mode": "manual"
+   }
+   ```
+
+2. **Abort**
+   ```json
+   {
+     "session_id": "xxx",
+     "type": "abort",
+     "reason": "wake_word_detected"
+   }
+   ```
+
+3. **MCP**
+   ```json
+   {
+     "session_id": "xxx",
+     "type": "mcp",
+     "payload": {
+       "jsonrpc": "2.0",
+       "id": 1,
+       "result": {}
+     }
+   }
+   ```
+
+4. **Goodbye**
+   ```json
+   {
+     "session_id": "xxx",
+     "type": "goodbye"
+   }
+   ```
+
+#### 3.3.2 Server -> Device
+
+Semantics match the WebSocket protocol. Supported types:
+- **STT** - speech recognition result.
+- **TTS** - TTS lifecycle (`start`, `stop`, `sentence_start`).
+- **LLM** - emotion update for the UI.
+- **MCP** - IoT control.
+- **System** - system control, e.g. `"command": "reboot"`.
+- **Alert** - show an alert on the UI; fields: `status`, `message`, `emotion`.
+- **Goodbye** - server-initiated shutdown of the audio session. The device responds by closing the UDP channel without sending its own goodbye.
+- **Custom** (optional, enabled via `CONFIG_RECEIVE_CUSTOM_MESSAGE`).
+
+Example alert:
 ```json
 {
-  "type": "device_status",
-  "status": "idle", // "listening", "speaking", "thinking"
-  "battery": 85,
-  "volume": 50,
-  "session_id": "xxx"
-}
-```
-
-**Tin nhắn MCP**
-```json
-{
-  "type": "mcp",
   "session_id": "xxx",
-  "payload": {
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "self.speaker.set_volume",
-      "arguments": {"volume": 70}
-    },
-    "id": 1
-  }
-}
-```
-
-**Tin nhắn Listen**
-```json
-{
-  "type": "listen",
-  "session_id": "xxx"
-}
-```
-
-#### 3.3.2 Server → Thiết bị
-
-**Tin nhắn TTS**
-```json
-{
-  "type": "tts",
-  "text": "Xin chào, tôi có thể giúp gì cho bạn?",
-  "session_id": "xxx"
-}
-```
-
-**Kết quả STT**
-```json
-{
-  "type": "stt_result",
-  "text": "Thời tiết hôm nay như thế nào?",
-  "session_id": "xxx"
+  "type": "alert",
+  "status": "Warning",
+  "message": "Battery low",
+  "emotion": "sad"
 }
 ```
 
 ---
 
-## 4. Kênh âm thanh UDP
+## 4. UDP Audio Channel
 
-### 4.1 Thiết lập kết nối
+### 4.1 Establishing the channel
 
-Sau khi nhận thông tin UDP từ tin nhắn Hello, thiết bị:
-1. Tạo socket UDP
-2. Kết nối đến địa chỉ và port được chỉ định
-3. Khởi tạo bộ mã hóa AES-CTR với key và IV
+After the device receives the MQTT hello response, it:
+1. Parses the UDP host and port.
+2. Parses the AES key and nonce.
+3. Initializes the AES-CTR context.
+4. Opens the UDP socket.
 
-### 4.2 Định dạng dữ liệu âm thanh
+### 4.2 Audio packet format
 
-#### 4.2.1 Cấu trúc gói âm thanh mã hóa
+#### 4.2.1 Encrypted audio packet
 
-```c
-struct EncryptedAudioPacket {
-    uint32_t sequence;       // Số thứ tự gói
-    uint32_t timestamp;      // Timestamp (milliseconds)
-    uint16_t payload_size;   // Kích thước payload đã mã hóa
-    uint8_t encrypted_data[]; // Dữ liệu Opus đã mã hóa
-} __attribute__((packed));
+```
+|type 1B|flags 1B|payload_len 2B|ssrc 4B|timestamp 4B|sequence 4B|
+|payload payload_len bytes|
 ```
 
-#### 4.2.2 Thuật toán mã hóa
+Field reference:
+- `type`: packet type, always `0x01`.
+- `flags`: flags, currently unused.
+- `payload_len`: payload length (network byte order).
+- `ssrc`: synchronization source identifier.
+- `timestamp`: timestamp (network byte order).
+- `sequence`: sequence number (network byte order).
+- `payload`: encrypted Opus audio data.
 
-- **Thuật toán**: AES-CTR
-- **Kích thước khóa**: 256-bit
-- **IV**: 128-bit, được cung cấp trong tin nhắn Hello
-- **Counter**: Bắt đầu từ 0, tăng dần cho mỗi gói
+#### 4.2.2 Encryption
 
-```c
-// Mã hóa
-encrypted_size = aes_ctr_encrypt(opus_data, opus_size, 
-                                key, iv, counter, 
-                                encrypted_data);
+Uses **AES-CTR** with:
+- **Key**: 128-bit, provided by the server.
+- **Nonce**: 128-bit, provided by the server.
+- **Counter**: built from the timestamp and sequence number.
 
-// Giải mã
-opus_size = aes_ctr_decrypt(encrypted_data, encrypted_size,
-                           key, iv, counter,
-                           opus_data);
-```
+### 4.3 Sequence number management
 
-### 4.3 Xử lý sequence và timestamp
+- **Sender**: `local_sequence_` is incremented monotonically.
+- **Receiver**: `remote_sequence_` validates continuity.
+- **Anti-replay**: packets with sequence numbers below the expected value are dropped.
+- **Tolerance**: small gaps are logged as warnings but still accepted.
 
-- **Sequence**: Số thứ tự gói, bắt đầu từ 1, tăng dần
-- **Timestamp**: Thời gian gửi gói (milliseconds)
-- **Chống replay**: Server từ chối gói có sequence cũ
-- **Phát hiện mất gói**: Dựa vào khoảng trống trong sequence
+### 4.4 Error handling
+
+1. **Decryption failure** - log an error and drop the packet.
+2. **Sequence gap** - log a warning, continue processing the packet.
+3. **Malformed packet** - log an error and drop.
 
 ---
 
-## 5. Luồng hoạt động chi tiết
+## 5. State Management
 
-### 5.1 Khởi động phiên
+### 5.1 Connection state
 
 ```mermaid
-sequenceDiagram
-    participant Device
-    participant MQTT
-    participant UDP
-
-    Device->>MQTT: Connect
-    Device->>MQTT: Subscribe to topics
-    Device->>MQTT: Hello (transport: udp)
-    MQTT->>Device: Hello (UDP config + keys)
-    Device->>UDP: Connect
-    Note over Device: Khởi tạo AES-CTR
+stateDiagram
+    direction TB
+    [*] --> Disconnected
+    Disconnected --> MqttConnecting: StartMqttClient()
+    MqttConnecting --> MqttConnected: MQTT Connected
+    MqttConnecting --> Disconnected: Connect failed
+    MqttConnected --> RequestingChannel: OpenAudioChannel()
+    RequestingChannel --> ChannelOpened: Hello exchange success
+    RequestingChannel --> MqttConnected: Hello timeout / failed
+    ChannelOpened --> UdpConnected: UDP connect success
+    UdpConnected --> AudioStreaming: Start audio
+    AudioStreaming --> UdpConnected: Stop audio
+    UdpConnected --> ChannelOpened: UDP disconnect
+    ChannelOpened --> MqttConnected: CloseAudioChannel()
+    MqttConnected --> Disconnected: MQTT disconnect
 ```
 
-### 5.2 Truyền tải âm thanh
+### 5.2 State check
 
-```mermaid
-sequenceDiagram
-    participant Device
-    participant UDP
-
-    loop Mỗi frame âm thanh
-        Note over Device: Mã hóa Opus data
-        Device->>UDP: EncryptedAudioPacket
-        UDP->>Device: EncryptedAudioPacket (TTS)
-        Note over Device: Giải mã và phát
-    end
-```
-
-### 5.3 Kết thúc phiên
-
-```mermaid
-sequenceDiagram
-    participant Device
-    participant MQTT
-    participant UDP
-
-    Device->>MQTT: Goodbye
-    Device->>UDP: Disconnect
-    Device->>MQTT: Unsubscribe
-    Device->>MQTT: Disconnect
+The device determines whether the audio channel is available with:
+```cpp
+bool IsAudioChannelOpened() const {
+    return udp_ != nullptr && !error_occurred_ && !IsTimeout();
+}
 ```
 
 ---
 
-## 6. Xử lý lỗi và phục hồi
+## 6. Configuration Parameters
 
-### 6.1 Lỗi kết nối MQTT
+### 6.1 MQTT settings
 
-- **Tự động kết nối lại**: Thử kết nối lại sau 5 giây
-- **Exponential backoff**: Tăng dần thời gian chờ
-- **Giới hạn thử lại**: Tối đa 10 lần
+Read from storage:
+- `endpoint` - broker address.
+- `client_id` - client identifier.
+- `username` - user name.
+- `password` - password.
+- `keepalive` - keep-alive interval (default 240 s).
+- `publish_topic` - publish topic.
 
-### 6.2 Lỗi UDP
+### 6.2 Audio parameters
 
-- **Timeout**: 5 giây không nhận dữ liệu → ngắt kết nối
-- **Lỗi giải mã**: Bỏ qua gói lỗi, tiếp tục xử lý
-- **Mất gói**: Phát hiện và log, không cần retransmit
-
-### 6.3 Lỗi đồng bộ
-
-- **Session timeout**: 30 giây không hoạt động → đóng phiên
-- **Sequence mismatch**: Reset counter và thông báo lỗi
-
----
-
-## 7. Bảo mật
-
-### 7.1 Mã hóa
-
-- **MQTT**: TLS 1.2+ cho kênh điều khiển
-- **UDP**: AES-CTR cho dữ liệu âm thanh
-- **Key rotation**: Khóa mới cho mỗi phiên
-
-### 7.2 Xác thực
-
-- **MQTT**: Username/Password hoặc Certificate
-- **UDP**: Session ID và sequence validation
-- **Token**: JWT cho authorization
-
-### 7.3 Phòng chống tấn công
-
-- **Replay protection**: Sequence number validation
-- **Rate limiting**: Giới hạn tần suất gói tin
-- **Input validation**: Kiểm tra định dạng tin nhắn
+- **Format**: Opus
+- **Sample rate**: 16 kHz device / 24 kHz server
+- **Channels**: 1 (mono)
+- **Frame duration**: 60 ms
 
 ---
 
-## 8. Hiệu suất và tối ưu hóa
+## 7. Error Handling and Reconnection
 
-### 8.1 Độ trễ
+### 7.1 MQTT reconnect
 
-- **MQTT**: ~50-100ms (điều khiển)
-- **UDP**: ~10-30ms (âm thanh)
-- **Tổng độ trễ**: ~60-130ms
+- Automatic retry on connect failure.
+- Optional error reporting.
+- Clean-up runs on disconnect.
 
-### 8.2 Băng thông
+### 7.2 UDP connection
 
-- **Opus 16kHz**: ~24kbps
-- **Protocol overhead**: ~5%
-- **Tổng băng thông**: ~25kbps
+- No automatic retry; depends on re-negotiation via MQTT.
+- Status can be queried at any time.
 
-### 8.3 Tối ưu hóa
+### 7.3 Timeouts
 
-- **Buffer size**: 3-5 frame để chống jitter
-- **Compression**: Sử dụng Opus VBR mode
-- **QoS**: MQTT QoS 1, UDP best effort
+The base `Protocol` class provides timeout detection:
+- Default timeout: 120 s.
+- Based on the time since the last incoming packet.
+- After a timeout the channel is marked unavailable.
 
 ---
 
-## 9. Monitoring và Debug
+## 8. Security
 
-### 9.1 Metrics quan trọng
+### 8.1 Transport encryption
 
-- **Connection success rate**: Tỷ lệ kết nối thành công
-- **Audio latency**: Độ trễ âm thanh end-to-end
-- **Packet loss rate**: Tỷ lệ mất gói UDP
-- **Decryption failures**: Lỗi giải mã
+- **MQTT**: supports TLS/SSL (port 8883).
+- **UDP**: AES-CTR on audio payloads.
 
-### 9.2 Logging
+### 8.2 Authentication
 
-```c
-// Kết nối
-ESP_LOGI(TAG, "MQTT connected to %s", broker_url);
-ESP_LOGI(TAG, "UDP connected to %s:%d", host, port);
+- **MQTT**: user name / password.
+- **UDP**: keys are distributed via the MQTT channel.
 
-// Âm thanh
-ESP_LOGD(TAG, "Audio TX: seq=%u, size=%u", sequence, size);
-ESP_LOGD(TAG, "Audio RX: seq=%u, size=%u", sequence, size);
+### 8.3 Anti-replay
 
-// Lỗi
-ESP_LOGE(TAG, "Decryption failed: seq=%u", sequence);
-ESP_LOGE(TAG, "Sequence gap detected: expected=%u, got=%u", expected, received);
+- Monotonically increasing sequence numbers.
+- Stale packets are dropped.
+- Timestamps are validated.
+
+---
+
+## 9. Performance Notes
+
+### 9.1 Concurrency
+
+A mutex protects the UDP connection:
+```cpp
+std::lock_guard<std::mutex> lock(channel_mutex_);
 ```
 
----
+### 9.2 Memory management
 
-## 10. So sánh với WebSocket
+- Network objects are created and destroyed dynamically.
+- Audio packets are managed with smart pointers.
+- Encryption contexts are released promptly.
 
-| Tiêu chí | MQTT+UDP | WebSocket |
-|----------|----------|-----------|
-| Kênh điều khiển | MQTT | WebSocket |
-| Kênh âm thanh | UDP (mã hóa) | WebSocket (binary) |
-| Tính thời gian thực | Cao (UDP) | Trung bình |
-| Độ tin cậy | Trung bình | Cao |
-| Độ phức tạp | Cao | Thấp |
-| Mã hóa | AES-CTR | TLS |
-| Thân thiện với firewall | Thấp | Cao |
+### 9.3 Network optimizations
+
+- UDP connection reuse.
+- Reasonable packet sizes.
+- Sequence continuity checks.
 
 ---
 
-## 11. Đề xuất triển khai
+## 10. Comparison with WebSocket
 
-### 11.1 Môi trường mạng
-
-- Đảm bảo port UDP có thể truy cập
-- Cấu hình quy tắc firewall
-- Cân nhắc NAT traversal
-
-### 11.2 Cấu hình server
-
-- Cấu hình MQTT Broker
-- Triển khai UDP server
-- Hệ thống quản lý khóa
-
-### 11.3 Các chỉ số monitoring
-
-- Tỷ lệ kết nối thành công
-- Độ trễ truyền âm thanh
-- Tỷ lệ mất gói dữ liệu
-- Tỷ lệ lỗi giải mã
+| Feature | MQTT + UDP | WebSocket |
+|---------|------------|-----------|
+| Control channel | MQTT | WebSocket |
+| Audio channel | UDP (encrypted) | WebSocket (binary) |
+| Latency | Low (UDP) | Medium |
+| Reliability | Medium | High |
+| Complexity | High | Low |
+| Encryption | AES-CTR | TLS |
+| Firewall friendliness | Low | High |
 
 ---
 
-## 12. Tổng kết
+## 11. Deployment Notes
 
-Giao thức hỗn hợp MQTT + UDP thực hiện giao tiếp audio-video hiệu quả thông qua các thiết kế sau:
+### 11.1 Network
 
-- **Kiến trúc tách biệt**: Tách riêng kênh điều khiển và dữ liệu, mỗi kênh có vai trò riêng
-- **Bảo vệ mã hóa**: AES-CTR đảm bảo truyền tải dữ liệu âm thanh an toàn
-- **Quản lý tuần tự**: Ngăn chặn tấn công replay và dữ liệu bị sai thứ tự
-- **Tự động phục hồi**: Hỗ trợ tự động kết nối lại sau khi ngắt kết nối
-- **Tối ưu hiệu suất**: Truyền UDP đảm bảo tính thời gian thực của dữ liệu âm thanh
+- Ensure UDP ports are reachable.
+- Configure firewall rules accordingly.
+- Plan for NAT traversal if needed.
 
-Giao thức này phù hợp với các tình huống tương tác giọng nói có yêu cầu cao về tính thời gian thực, nhưng cần cân đối giữa độ phức tạp mạng và hiệu suất truyền tải.
+### 11.2 Server infrastructure
+
+- MQTT broker configuration.
+- UDP server deployment.
+- Key management.
+
+### 11.3 Monitoring
+
+- Connection success rate.
+- Audio transmission latency.
+- Packet loss.
+- Decryption failures.
+
+---
+
+## 12. Summary
+
+The MQTT + UDP hybrid protocol achieves efficient audio communication through:
+
+- **Split architecture** - separate control and data channels with clear responsibilities.
+- **Encryption** - AES-CTR protects audio payloads.
+- **Sequence management** - prevents replay and reordering.
+- **Automatic recovery** - MQTT reconnects on failure.
+- **Performance** - UDP keeps audio latency low.
+
+The protocol is a good fit for low-latency voice interaction, at the cost of higher network complexity than pure WebSocket.

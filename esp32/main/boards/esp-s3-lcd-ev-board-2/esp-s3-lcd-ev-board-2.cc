@@ -5,10 +5,10 @@
 #include "button.h"
 #include "led/single_led.h"
 #include "pin_config.h"
+#include "esp_video.h"
 
 #include "config.h"
 
-#include <wifi_station.h>
 #include <esp_log.h>
 #include <driver/i2c_master.h>
 #include "esp_lcd_gc9503.h"
@@ -27,6 +27,8 @@ private:
     i2c_master_bus_handle_t i2c_bus_;
     Button boot_button_;
     LcdDisplay* display_;
+    EspVideo* camera_;
+
     //add support ev board lcd
     esp_io_expander_handle_t expander = NULL;
 
@@ -153,8 +155,9 @@ private:
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                ResetWifiConfiguration();
+            if (app.GetDeviceState() == kDeviceStateStarting) {
+                EnterWifiConfigMode();
+                return;
             }
         });
         boot_button_.OnPressDown([this]() {
@@ -183,7 +186,16 @@ private:
             },
         };
         esp_lcd_panel_io_handle_t tp_io_handle = NULL;
-        esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_GT1151_CONFIG();
+        esp_lcd_panel_io_i2c_config_t tp_io_config = {
+            .dev_addr = ESP_LCD_TOUCH_IO_I2C_GT1151_ADDRESS,
+            .control_phase_bytes = 1,
+            .dc_bit_offset = 0,
+            .lcd_cmd_bits = 16,
+            .flags =
+            {
+                .disable_control_phase = 1,
+            }
+        };
         tp_io_config.scl_speed_hz = 400 * 1000;
         ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(i2c_bus_, &tp_io_config, &tp_io_handle));
         ESP_ERROR_CHECK(esp_lcd_touch_new_i2c_gt1151(tp_io_handle, &tp_cfg, &tp));
@@ -195,12 +207,39 @@ private:
         lvgl_port_add_touch(&touch_cfg);
     }
 
+#ifdef CONFIG_ESP_VIDEO_ENABLE_USB_UVC_VIDEO_DEVICE
+    void InitializeCamera() {
+        esp_video_init_usb_uvc_config_t usb_uvc_config = {
+            .uvc = {
+                .uvc_dev_num = 1,
+                .task_stack = 4096,
+                .task_priority = 5,
+                .task_affinity = -1,
+            },
+            .usb = {
+                .init_usb_host_lib = true,
+                .task_stack = 4096,
+                .task_priority = 5,
+                .task_affinity = -1,
+            },
+        };
+    }
+        esp_video_init_config_t video_config = {
+            .usb_uvc = &usb_uvc_config,
+        };
+        camera_ = new EspVideo(video_config);
+    }
+#endif // CONFIG_ESP_VIDEO_ENABLE_USB_UVC_VIDEO_DEVICE
+
 public:
     ESP_S3_LCD_EV_Board_2() : boot_button_(BOOT_BUTTON_GPIO) {
         InitializeCodecI2c();
         InitializeButtons();
         InitializeRGB_GC9503V_Display();
         InitializeTouch();
+#ifdef CONFIG_ESP_VIDEO_ENABLE_USB_UVC_VIDEO_DEVICE
+        InitializeCamera();
+#endif // CONFIG_ESP_VIDEO_ENABLE_USB_UVC_VIDEO_DEVICE
     }
 
     virtual AudioCodec* GetAudioCodec() override {
@@ -229,6 +268,12 @@ public:
         static SingleLed led(BUILTIN_LED_GPIO);
         return &led;
     }
+
+#ifdef CONFIG_ESP_VIDEO_ENABLE_USB_UVC_VIDEO_DEVICE
+    virtual Camera* GetCamera() override {
+        return camera_;
+    }
+#endif // CONFIG_ESP_VIDEO_ENABLE_USB_UVC_VIDEO_DEVICE
 
 };
 

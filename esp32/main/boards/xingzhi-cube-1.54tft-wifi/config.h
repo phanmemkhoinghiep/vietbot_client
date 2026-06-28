@@ -4,32 +4,6 @@
 
 #include <driver/gpio.h>
 
-#ifdef CONFIG_SD_CARD_MMC_INTERFACE
-// Define to use 4-bit SDMMC bus width; comment out to use 1-bit bus width
-// #define CARD_SDMMC_BUS_WIDTH_4BIT
-
-#ifdef CARD_SDMMC_BUS_WIDTH_4BIT
-#define CARD_SDMMC_CLK_GPIO GPIO_NUM_3  // CLK pin
-#define CARD_SDMMC_CMD_GPIO GPIO_NUM_2  // MOSI pin or DI
-#define CARD_SDMMC_D0_GPIO  GPIO_NUM_1  // MISO pin or DO
-#define CARD_SDMMC_D1_GPIO  GPIO_NUM_NC
-#define CARD_SDMMC_D2_GPIO  GPIO_NUM_NC
-#define CARD_SDMMC_D3_GPIO  GPIO_NUM_46 // CS pin
-#else
-#define CARD_SDMMC_CLK_GPIO GPIO_NUM_3  // CLK pin
-#define CARD_SDMMC_CMD_GPIO GPIO_NUM_2  // MISO pin
-#define CARD_SDMMC_D0_GPIO  GPIO_NUM_1  // MOSI pin
-#define CARD_SDMMC_D3_GPIO  GPIO_NUM_46 // CS pin
-#endif
-#endif // CONFIG_SD_CARD_MMC_INTERFACE
-
-#ifdef CONFIG_SD_CARD_SPI_INTERFACE
-#define CARD_SPI_MOSI_GPIO GPIO_NUM_2   // DI
-#define CARD_SPI_MISO_GPIO GPIO_NUM_1   // DO
-#define CARD_SPI_SCLK_GPIO GPIO_NUM_3   // CLK
-#define CARD_SPI_CS_GPIO   GPIO_NUM_46  // CS
-#endif // CONFIG_SD_CARD_SPI_INTERFACE
-
 #define AUDIO_INPUT_SAMPLE_RATE  16000
 #define AUDIO_OUTPUT_SAMPLE_RATE 24000
 #define AUDIO_I2S_MIC_GPIO_WS   GPIO_NUM_4
@@ -58,8 +32,5 @@
 #define DISPLAY_OFFSET_Y  0
 #define DISPLAY_BACKLIGHT_PIN GPIO_NUM_13
 #define DISPLAY_BACKLIGHT_OUTPUT_INVERT false
-
-#define SECONDS_TO_SLEEP_MODE   (60U * 5U)  // 5 minutes
-#define SECONDS_TO_SHUTDOWN     (60U * 60U * 12U) // 12 hours
 
 #endif // _BOARD_CONFIG_H_

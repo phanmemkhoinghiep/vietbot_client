@@ -1,7 +1,3 @@
-# WebSocket 通信协议文档
-
-（[Tiếng Việt](websocket.md) | 中文）
-
 以下是一份基于代码实现整理的 WebSocket 通信协议文档，概述设备端与服务器之间如何通过 WebSocket 进行交互。
 
 该文档仅基于所提供的代码推断，实际部署时可能需要结合服务器端实现进行进一步确认或补充。
@@ -198,7 +194,7 @@ WebSocket 文本帧以 JSON 方式传输，以下为常见的 `"type"` 字段及
      ```
 
 5. **MCP**
-   - 推荐用于物联网控制的新一代协议。所有设备能力发现、工具调用等均通过 type: "mcp" 的消息进行，payload 内部为标准 JSON-RPC 2.0（详见 [MCP 协议文档](./mcp-protocol.md)）。
+   - 推荐用于物联网控制的新一代协议。所有设备能力发现、工具调用等均通过 type: "mcp" 的消息进行，payload 内部为标准 JSON-RPC 2.0（详见 [MCP 协议文档](./mcp-protocol_zh.md)）。
    
    - **设备端到服务器发送 result 的例子：**
      ```json
@@ -403,7 +399,7 @@ stateDiagram
 5. **物联网控制推荐 MCP 协议**  
    - 设备与服务器之间的物联网能力发现、状态同步、控制指令等，建议全部通过 MCP 协议（type: "mcp"）实现。原有的 type: "iot" 方案已废弃。
    - MCP 协议可在 WebSocket、MQTT 等多种底层协议上传输，具备更好的扩展性和标准化能力。
-   - 详细用法请参考 [MCP 协议文档](./mcp-protocol.md) 及 [MCP 物联网控制用法](./mcp-usage.md)。
+   - 详细用法请参考 [MCP 协议文档](./mcp-protocol_zh.md) 及 [MCP 物联网控制用法](./mcp-usage_zh.md)。
 
 6. **错误或异常 JSON**  
    - 当 JSON 中缺少必要字段，例如 `{"type": ...}`，设备端会记录错误日志（`ESP_LOGE(TAG, "Missing message type, data: %s", data);`），不会执行任何业务。

@@ -1,11 +1,6 @@
 #include "wifi_board.h"
 #include "codecs/no_audio_codec.h"
 #include "display/lcd_display.h"
-#ifdef CONFIG_SD_CARD_MMC_INTERFACE
-#include "sdmmc.h"
-#elif defined(CONFIG_SD_CARD_SPI_INTERFACE)
-#include "sdspi.h"
-#endif
 #include "system_reset.h"
 #include "application.h"
 #include "button.h"
@@ -17,7 +12,6 @@
 
 #include <esp_log.h>
 #include <esp_lcd_panel_vendor.h>
-#include <wifi_station.h>
 
 #include <driver/rtc_io.h>
 #include <esp_sleep.h>
@@ -51,7 +45,7 @@ private:
         rtc_gpio_set_direction(GPIO_NUM_21, RTC_GPIO_MODE_OUTPUT_ONLY);
         rtc_gpio_set_level(GPIO_NUM_21, 1);
 
-        power_save_timer_ = new PowerSaveTimer(-1, SECONDS_TO_SLEEP_MODE, SECONDS_TO_SHUTDOWN);
+        power_save_timer_ = new PowerSaveTimer(-1, 60, 300);
         power_save_timer_->OnEnterSleepMode([this]() {
             GetDisplay()->SetPowerSaveMode(true);
             GetBacklight()->SetBrightness(1);
@@ -63,9 +57,9 @@ private:
         power_save_timer_->OnShutdownRequest([this]() {
             ESP_LOGI(TAG, "Shutting down");
             rtc_gpio_set_level(GPIO_NUM_21, 0);
-            // Enable hold function to ensure the level remains constant during sleep.
+            // 启用保持功能，确保睡眠期间电平不变
             rtc_gpio_hold_en(GPIO_NUM_21);
-            esp_lcd_panel_disp_on_off(panel_, false); //Turn off display
+            esp_lcd_panel_disp_on_off(panel_, false); //关闭显示
             esp_deep_sleep_start();
         });
         power_save_timer_->SetEnabled(true);
@@ -83,15 +77,12 @@ private:
     }
 
     void InitializeButtons() {
-        boot_button_.OnMultipleClick([this]() {
-            ResetWifiConfiguration();
-        }, 5);
-
         boot_button_.OnClick([this]() {
             power_save_timer_->WakeUp();
             auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                ResetWifiConfiguration();
+            if (app.GetDeviceState() == kDeviceStateStarting) {
+                EnterWifiConfigMode();
+                return;
             }
             app.ToggleChatState();
         });
@@ -199,46 +190,12 @@ public:
         return true;
     }
 
-    virtual void SetPowerSaveMode(bool enabled) override {
-        if (!enabled) {
+    virtual void SetPowerSaveLevel(PowerSaveLevel level) override {
+        if (level != PowerSaveLevel::LOW_POWER) {
             power_save_timer_->WakeUp();
         }
-        WifiBoard::SetPowerSaveMode(enabled);
+        WifiBoard::SetPowerSaveLevel(level);
     }
-
-#ifdef CONFIG_SD_CARD_MMC_INTERFACE
-    virtual SdCard* GetSdCard() override {
-#ifdef CARD_SDMMC_BUS_WIDTH_4BIT
-        static SdMMC sdmmc(CARD_SDMMC_CLK_GPIO,
-                           CARD_SDMMC_CMD_GPIO,
-                           CARD_SDMMC_D0_GPIO,
-                           CARD_SDMMC_D1_GPIO,
-                           CARD_SDMMC_D2_GPIO,
-                           CARD_SDMMC_D3_GPIO);
-#else
-#ifdef CARD_SDMMC_D3_GPIO
-        if (CARD_SDMMC_D3_GPIO != GPIO_NUM_NC) {
-            gpio_set_direction(CARD_SDMMC_D3_GPIO, GPIO_MODE_INPUT);
-            gpio_pullup_en(CARD_SDMMC_D3_GPIO);
-            vTaskDelay(pdMS_TO_TICKS(10)); // Wait for the pin to stabilize
-        }
-#endif
-        static SdMMC sdmmc(CARD_SDMMC_CLK_GPIO,
-                           CARD_SDMMC_CMD_GPIO,
-                           CARD_SDMMC_D0_GPIO);
-#endif
-        return &sdmmc;
-    }
-#endif
-#ifdef CONFIG_SD_CARD_SPI_INTERFACE
-    virtual SdCard* GetSdCard() override {
-        static SdSPI sdspi(CARD_SPI_MISO_GPIO,
-                           CARD_SPI_MOSI_GPIO,
-                           CARD_SPI_SCLK_GPIO,
-                           CARD_SPI_CS_GPIO);
-        return &sdspi;
-    }
-#endif
 };
 
 DECLARE_BOARD(XINGZHI_CUBE_1_54TFT_WIFI);

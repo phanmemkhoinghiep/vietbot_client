@@ -8,24 +8,29 @@
 
 ## 基础使用
 
-* idf version: v6.0-dev
+* idf version: v5.5.2 or above (recommended: v6.0-dev)
 
-1. 设置编译目标为 esp32p4
+* No dependency override needed — the project already specifies the correct `esp_video` and `esp_ipa` versions in `main/idf_component.yml`. Do NOT change the dependency versions unless you are also modifying the source code to match the older API.
+
+针对 ESP32-P4 Rev <3.0 用户:
+确保你的 sdkconfig.defaults 包含:
+
+CONFIG_ESP32P4_SELECTS_REV_LESS_V3=y
+
+否则烧写的时候会出现：'bootloader/bootloader.bin' requires chip revision in range [v3.0 - v3.99] (this chip is revision v1.x)
+
+1. 使用 release.py 编译
 
 ```shell
-idf.py set-target esp32p4 
+python ./scripts/release.py m5stack-tab5
 ```
 
-2. 修改配置 
+如需手动编译，请参考 `m5stack-tab5/config.json` 修改 menuconfig 对应选项。
+
+2. 编译烧录程序
 
 ```shell
-cp main/boards/m5stack-tab5/sdkconfig.tab5 sdkconfig
-```
-
-3. 编译烧录程序
-
-```shell
-idf.py build flash monitor
+idf.py flash monitor
 ```
 
 > [!NOTE]
@@ -39,5 +44,3 @@ idf.py build flash monitor
 1. listening... 需要等几秒才能获取语音输入???
 2. 亮度调节不对
 3. 音量调节不对
- 
-## TODO

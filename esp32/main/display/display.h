@@ -15,10 +15,6 @@
 #include <string>
 #include <chrono>
 
-// Forward declarations for weather structures
-struct IdleCardInfo;
-struct WeatherInfo;
-
 class Theme {
 public:
     Theme(const std::string& name) : name_(name) {}
@@ -39,38 +35,23 @@ public:
     virtual void ShowNotification(const std::string &notification, int duration_ms = 3000);
     virtual void SetEmotion(const char* emotion);
     virtual void SetChatMessage(const char* role, const char* content);
+    virtual void ClearChatMessages();
     virtual void SetTheme(Theme* theme);
     virtual Theme* GetTheme() { return current_theme_; }
     virtual void UpdateStatusBar(bool update_all = false);
     virtual void SetPowerSaveMode(bool on);
-
-    /**
-     * @brief Show or hide the media overlay on the main UI.
-     *
-     * When active, hides the main emotion/chat UI (emoji, chat message,
-     * idle card) to make room for media content (FFT spectrum, video
-     * canvas, etc.).  When deactivated, the original UI is restored.
-     *
-     * @param active  true = media overlay is active (hide main UI),
-     *                false = restore main UI
-     */
-    virtual void SetMediaOverlayActive(bool active) {}
-
-    // For rotation display
-    virtual bool SetRotation(int rotation_degree, bool save_setting) { return false; }
-    
-#ifdef CONFIG_WEATHER_IDLE_DISPLAY_ENABLE
-    // For weather idle card
-    virtual void ShowIdleCard(const IdleCardInfo& info) {}
-    virtual void HideIdleCard() {}
-#endif
+    virtual void SetupUI() { 
+        setup_ui_called_ = true;
+    }
 
     inline int width() const { return width_; }
     inline int height() const { return height_; }
+    inline bool IsSetupUICalled() const { return setup_ui_called_; }
 
 protected:
     int width_ = 0;
     int height_ = 0;
+    bool setup_ui_called_ = false;  // Track if SetupUI() has been called
 
     Theme* current_theme_ = nullptr;
 

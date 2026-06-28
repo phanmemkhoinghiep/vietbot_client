@@ -10,7 +10,6 @@
 #include "assets/lang_config.h"
 
 #include <esp_log.h>
-#include "esp_camera.h"
 #include <esp_lcd_panel_vendor.h>
 #include <driver/i2c_master.h>
 #include <driver/spi_common.h>
@@ -86,13 +85,13 @@ private:
     Button volume_down_button_;
     LcdDisplay* display_ = nullptr;
     Pca9557* pca9557_;
-    Esp32Camera* camera_ = nullptr;
+    Esp32Camera* camera_;
     PowerManager* power_manager_ = new PowerManager(GPIO_NUM_47);
 
     void InitializeI2c() {
         // Initialize I2C peripheral
         i2c_master_bus_config_t i2c_bus_cfg = {
-            .i2c_port   = AUDIO_CODEC_I2C_NUM,
+            .i2c_port = (i2c_port_t)1,
             .sda_io_num = AUDIO_CODEC_I2C_SDA_PIN,
             .scl_io_num = AUDIO_CODEC_I2C_SCL_PIN,
             .clk_source = I2C_CLK_SRC_DEFAULT,
@@ -123,8 +122,10 @@ private:
     void InitializeButtons() {
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                ResetWifiConfiguration();
+            // During startup (before connected), pressing BOOT button enters Wi-Fi config mode without reboot
+            if (app.GetDeviceState() == kDeviceStateStarting) {
+                EnterWifiConfigMode();
+                return;
             }
             app.ToggleChatState();
         });
@@ -133,27 +134,26 @@ private:
             Settings settings(FIRST_BOOT_NS, true);
             bool is_first_boot = settings.GetInt(FIRST_BOOT_KEY, 1) != 0;
             if (is_first_boot) {
-                ESP_LOGI(TAG, "On first launch, double-tap to take a picture function is enabled.");
+                ESP_LOGI(TAG, "首次启动，启用双击拍照功能");
                 auto camera = GetCamera();
                 if (!camera->Capture()) {
                     ESP_LOGE(TAG, "Camera capture failed");
                 }
                 settings.SetInt(FIRST_BOOT_KEY, 0);
+
+                
             } else {
-                ESP_LOGI(TAG, "Not the first launch, double-tap to take a picture function is disabled.");
+                ESP_LOGI(TAG, "非首次启动，禁用双击拍照功能");
                 auto& app = Application::GetInstance();
                 if (app.GetDeviceState() == kDeviceStateIdle) {
                     app.SetAecMode(app.GetAecMode() == kAecOff ? kAecOnDeviceSide : kAecOff);
-                    ESP_LOGI(TAG, "Toggled AEC mode via double-tap button %s", app.GetAecMode() == kAecOff ? "OFF" : "ON");
                     GetAudioCodec()->SetOutputVolume(60);
                 }
             }
         });
 
         boot_button_.OnLongPress([this]() {
-            auto& app = Application::GetInstance();
-            app.SetDeviceState(kDeviceStateWifiConfiguring);
-            ResetWifiConfiguration();
+            EnterWifiConfigMode();
         });
 
         volume_up_button_.OnClick([this]() {
@@ -238,53 +238,38 @@ private:
     }
 
     void InitializeCamera() {
-        static esp_cam_ctlr_dvp_pin_config_t dvp_pin_config = {
-            .data_width = CAM_CTLR_DATA_WIDTH_8,
-            .data_io = {
-                [0] = CAMERA_PIN_D0,
-                [1] = CAMERA_PIN_D1,
-                [2] = CAMERA_PIN_D2,
-                [3] = CAMERA_PIN_D3,
-                [4] = CAMERA_PIN_D4,
-                [5] = CAMERA_PIN_D5,
-                [6] = CAMERA_PIN_D6,
-                [7] = CAMERA_PIN_D7,
-            },
-            .vsync_io = CAMERA_PIN_VSYNC,
-            .de_io = CAMERA_PIN_HREF,
-            .pclk_io = CAMERA_PIN_PCLK,
-            .xclk_io = CAMERA_PIN_XCLK,
-        };
+        // Open camera power
+        pca9557_->SetOutputState(2, 0);
 
-        esp_video_init_sccb_config_t sccb_config = {
-#if (CAMERA_I2C_NUM != AUDIO_CODEC_I2C_NUM)
-            .init_sccb = true,
-            .i2c_config = {
-                .port = CAMERA_I2C_NUM,
-                .scl_pin = CAMERA_PIN_SIOC,
-                .sda_pin = CAMERA_PIN_SIOD,
-            },
-#else
-            .init_sccb = false, // Use existing I2C bus with audio codec
-            .i2c_handle = i2c_bus_,
-#endif
-            .freq = 100000,
-        };
+        camera_config_t config = {};
+        config.ledc_channel = LEDC_CHANNEL_2;  // LEDC通道选择  用于生成XCLK时钟 但是S3不用
+        config.ledc_timer = LEDC_TIMER_2; // LEDC timer选择  用于生成XCLK时钟 但是S3不用
+        config.pin_d0 = CAMERA_PIN_D0;
+        config.pin_d1 = CAMERA_PIN_D1;
+        config.pin_d2 = CAMERA_PIN_D2;
+        config.pin_d3 = CAMERA_PIN_D3;
+        config.pin_d4 = CAMERA_PIN_D4;
+        config.pin_d5 = CAMERA_PIN_D5;
+        config.pin_d6 = CAMERA_PIN_D6;
+        config.pin_d7 = CAMERA_PIN_D7;
+        config.pin_xclk = CAMERA_PIN_XCLK;
+        config.pin_pclk = CAMERA_PIN_PCLK;
+        config.pin_vsync = CAMERA_PIN_VSYNC;
+        config.pin_href = CAMERA_PIN_HREF;
+        config.pin_sccb_sda = -1;   // 这里写-1 表示使用已经初始化的I2C接口
+        config.pin_sccb_scl = CAMERA_PIN_SIOC;
+        config.sccb_i2c_port = 1;
+        config.pin_pwdn = CAMERA_PIN_PWDN;
+        config.pin_reset = CAMERA_PIN_RESET;
+        config.xclk_freq_hz = XCLK_FREQ_HZ;
+        config.pixel_format = PIXFORMAT_RGB565;
+        config.frame_size = FRAMESIZE_VGA;
+        config.jpeg_quality = 9;
+        config.fb_count = 1;
+        config.fb_location = CAMERA_FB_IN_PSRAM;
+        config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
 
-        esp_video_init_dvp_config_t dvp_config = {
-            .sccb_config = sccb_config,
-            .reset_pin = CAMERA_PIN_RESET,
-            .pwdn_pin = CAMERA_PIN_PWDN,
-            .dvp_pin = dvp_pin_config,
-            .xclk_freq = XCLK_FREQ_HZ,
-        };
-
-        esp_video_init_config_t video_config = {
-            .dvp = &dvp_config,
-        };
-
-        camera_ = new Esp32Camera(video_config);
-        camera_->SetHMirror(false);
+        camera_ = new Esp32Camera(config);
     }
 
 	void InitializeController() { InitializeMCPController(); }

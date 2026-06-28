@@ -10,9 +10,8 @@
 #include "application.h"
 #include "button.h"
 #include "config.h"
-#include "esp32_camera.h"
+#include "esp_video.h"
 
-#include <wifi_station.h>
 #include <esp_log.h>
 #include <inttypes.h>
 #include <driver/i2c_master.h>
@@ -46,7 +45,7 @@ private:
     Button boot_button_;
     LcdDisplay *display_ = nullptr;
     esp_lcd_touch_handle_t tp_ = nullptr;
-    Esp32Camera* camera_ = nullptr;
+    EspVideo* camera_ = nullptr;
 
     void InitializeI2cBuses()
     {
@@ -63,19 +62,7 @@ private:
     void InitializeLCD()
     {
         bsp_display_config_t config = {
-#if CONFIG_BSP_LCD_TYPE_HDMI
-#if CONFIG_BSP_LCD_HDMI_800x600_60HZ
-            .hdmi_resolution = BSP_HDMI_RES_800x600,
-#elif CONFIG_BSP_LCD_HDMI_1280x720_60HZ
-            .hdmi_resolution = BSP_HDMI_RES_1280x720,
-#elif CONFIG_BSP_LCD_HDMI_1280x800_60HZ
-            .hdmi_resolution = BSP_HDMI_RES_1280x800,
-#elif CONFIG_BSP_LCD_HDMI_1920x1080_30HZ
-            .hdmi_resolution = BSP_HDMI_RES_1920x1080,
-#endif
-#else
             .hdmi_resolution = BSP_HDMI_RES_NONE,
-#endif
             .dsi_bus = {
                 .phy_clk_src = (mipi_dsi_phy_clock_source_t)SOC_MOD_CLK_PLL_F20M,
                 .lane_bit_rate_mbps = 1000,
@@ -84,19 +71,8 @@ private:
 
         bsp_lcd_handles_t handles;
         ESP_ERROR_CHECK(bsp_display_new_with_handles(&config, &handles));
-#if CONFIG_BSP_LCD_TYPE_HDMI
-#if CONFIG_BSP_LCD_HDMI_800x600_60HZ
-        display_ = new MipiLcdDisplay(handles.io, handles.panel, 800, 600, 0, 0, true, true, false, LV_COLOR_FORMAT_RGB888);
-#elif CONFIG_BSP_LCD_HDMI_1280x720_60HZ
-        display_ = new MipiLcdDisplay(handles.io, handles.panel, 1280, 720, 0, 0, true, true, false, LV_COLOR_FORMAT_RGB888);
-#elif CONFIG_BSP_LCD_HDMI_1280x800_60HZ
-        display_ = new MipiLcdDisplay(handles.io, handles.panel, 1280, 800, 0, 0, true, true, false, LV_COLOR_FORMAT_RGB888);
-#elif CONFIG_BSP_LCD_HDMI_1920x1080_30HZ
-        display_ = new MipiLcdDisplay(handles.io, handles.panel, 1920, 1080, 0, 0, true, true, false, LV_COLOR_FORMAT_RGB888);
-#endif
-#else
-        display_ = new MipiLcdDisplay(handles.io, handles.panel, 1024, 600, 0, 0, true, true, false, LV_COLOR_FORMAT_RGB565);
-#endif
+
+        display_ = new MipiLcdDisplay(handles.io, handles.panel, 1024, 600, 0, 0, true, true, false);
     }
 
     void InitializeButtons()
@@ -104,10 +80,12 @@ private:
         boot_button_.OnClick([this]()
                              {
             auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                ResetWifiConfiguration();
+            if (app.GetDeviceState() == kDeviceStateStarting) {
+                EnterWifiConfigMode();
+                return;
             }
-            app.ToggleChatState(); });
+            app.ToggleChatState();
+        });
     }
 
     void InitializeTouch()
@@ -137,7 +115,7 @@ private:
             ESP_LOGE(TAG, "Failed to initialize BSP camera: %s", esp_err_to_name(ret));
             ESP_LOGI(TAG, "Attempting alternative camera initialization");
 
-            // Alternative: Direct Esp32Camera initialization if BSP fails
+            // Alternative: Direct EspVideo initialization if BSP fails
             // This provides more control over camera configuration
             static esp_cam_ctlr_dvp_pin_config_t dvp_pin_config = {
                 .data_width = CAM_CTLR_DATA_WIDTH_8,
@@ -176,7 +154,7 @@ private:
             };
 
             // Try to create camera with direct configuration
-            camera_ = new Esp32Camera(video_config);
+            camera_ = new EspVideo(video_config);
             ESP_LOGI(TAG, "Camera initialized with direct configuration");
         } else {
             ESP_LOGI(TAG, "Camera initialized successfully via BSP");
@@ -203,15 +181,13 @@ private:
 
 public:
 
-    ESP32P4FunctionEvBoard() : boot_button_(BOOT_BUTTON_GPIO)
+    ESP32P4FunctionEvBoard() : boot_button_(0)
     {
         InitializeI2cBuses();
         // Audio is initialized by Es8311AudioCodec
         InitializeLCD();
         InitializeButtons();
-#ifndef CONFIG_BSP_LCD_TYPE_HDMI
         InitializeTouch();
-#endif
         InitializeSdCard();
         InitializeCamera();
         InitializeFonts();

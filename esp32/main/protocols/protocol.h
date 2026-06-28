@@ -54,14 +54,6 @@ public:
     inline const std::string& session_id() const {
         return session_id_;
     }
-    // 🔥 NEW (2026-06-26): Listening mode từ server hello response
-    // - kListeningModeAutoStop (default): turn-based, AEC On (mode 1/2 Q&A)
-    // - kListeningModeRealtime: continuous streaming, AEC Off (mode 3 translation)
-    // - kListeningModeManualStop: manual control
-    // - FW cũ: không gọi getter → dùng default kListeningModeAutoStop (behavior không đổi)
-    inline ListeningMode listening_mode() const {
-        return listening_mode_;
-    }
 
     void OnIncomingAudio(std::function<void(std::unique_ptr<AudioStreamPacket> packet)> callback);
     void OnIncomingJson(std::function<void(const cJSON* root)> callback);
@@ -73,7 +65,7 @@ public:
 
     virtual bool Start() = 0;
     virtual bool OpenAudioChannel() = 0;
-    virtual void CloseAudioChannel() = 0;
+    virtual void CloseAudioChannel(bool send_goodbye = true) = 0;
     virtual bool IsAudioChannelOpened() const = 0;
     virtual bool SendAudio(std::unique_ptr<AudioStreamPacket> packet) = 0;
     virtual void SendWakeWordDetected(const std::string& wake_word);
@@ -93,7 +85,6 @@ protected:
 
     int server_sample_rate_ = 24000;
     int server_frame_duration_ = 60;
-    ListeningMode listening_mode_ = kListeningModeAutoStop;  // 🔥 NEW (2026-06-26): default = AutoStop (backward compatible)
     bool error_occurred_ = false;
     std::string session_id_;
     std::chrono::time_point<std::chrono::steady_clock> last_incoming_time_;

@@ -1,7 +1,5 @@
 # MCP (Model Context Protocol) 交互流程
 
-（[Tiếng Việt](mcp-protocol.md) | 中文）
-
 NOTICE: AI 辅助生成, 在实现后台服务时, 请参照代码确认细节!!
 
 本项目中的 MCP 协议用于后台 API（MCP 客户端）与 ESP32 设备（MCP 服务器）之间的通信，以便后台能够发现和调用设备提供的功能（工具）。

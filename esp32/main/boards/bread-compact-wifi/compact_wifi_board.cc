@@ -10,7 +10,6 @@
 #include "led/single_led.h"
 #include "assets/lang_config.h"
 
-#include <wifi_station.h>
 #include <esp_log.h>
 #include <driver/i2c_master.h>
 #include <esp_lcd_panel_ops.h>
@@ -102,14 +101,11 @@ private:
     }
 
     void InitializeButtons() {
-        boot_button_.OnMultipleClick([this]() {
-            ResetWifiConfiguration();
-        }, 5);
-        
         boot_button_.OnClick([this]() {
             auto& app = Application::GetInstance();
-            if (app.GetDeviceState() == kDeviceStateStarting && !WifiStation::GetInstance().IsConnected()) {
-                ResetWifiConfiguration();
+            if (app.GetDeviceState() == kDeviceStateStarting) {
+                EnterWifiConfigMode();
+                return;
             }
             app.ToggleChatState();
         });

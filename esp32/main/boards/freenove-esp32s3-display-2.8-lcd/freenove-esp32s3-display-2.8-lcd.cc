@@ -23,7 +23,7 @@
 #include "system_reset.h"
 #include "esp_lcd_ili9341.h"
 
-#define TAG "vietbot_esp32s3_display"
+#define TAG "FreenoveESP32S3Display"
 
 class TouchDriver {
 public:
@@ -60,7 +60,7 @@ private:
     i2c_master_dev_handle_t dev_;
 };
 
-class vietbot_esp32s3_display : public WifiBoard {
+class FreenoveESP32S3Display : public WifiBoard {
 private:
     Button boot_button_;
     LcdDisplay *display_;
@@ -73,7 +73,7 @@ private:
     }
 
     static void TouchTask(void *arg) {
-        auto *self = static_cast<vietbot_esp32s3_display*>(arg);
+        auto *self = static_cast<FreenoveESP32S3Display*>(arg);
         auto &app = Application::GetInstance();
 
         uint32_t last_tap = 0;
@@ -200,7 +200,7 @@ private:
     }
 
 public:
-    vietbot_esp32s3_display(): boot_button_(BOOT_BUTTON_GPIO)
+    FreenoveESP32S3Display(): boot_button_(BOOT_BUTTON_GPIO)
     {
         InitializeI2c();
         InitializeBatteryMonitor();
@@ -233,22 +233,11 @@ public:
     }
 
     virtual bool GetBatteryLevel(int &level, bool& charging, bool& discharging) override {
-        // 🔥 FIX (2026-06-28): Freenove board này KHÔNG có pin (chỉ cấp nguồn USB trực tiếp).
-        // Trước đây: AdcBatteryMonitor đọc ADC random + không có charging pin (GPIO_NUM_NC)
-        //   → adc_battery_estimation không có pin thật → return false → discharging=true
-        //   → random ADC value < 20% → icon=BATTERY_EMPTY + discharging=true
-        //   → lvgl_display.cc line 166 hiển thị popup "Pin yếu, vui lòng sạc" mỗi 10s
-        //
-        // Fix: Bỏ qua AdcBatteryMonitor, return giá trị giả:
-        //   - level = 100% (full)
-        //   - charging = true (đang nhận nguồn USB)
-        //   - discharging = false
-        // → Icon BATTERY_FULL + charging → KHÔNG bao giờ hiển thị low battery popup
-        level = 100;
-        charging = true;
-        discharging = false;
+        charging = adc_battery_monitor_->IsCharging();
+        discharging = adc_battery_monitor_->IsDischarging();
+        level = adc_battery_monitor_->GetBatteryLevel();
         return true;
     }
 };
 
-DECLARE_BOARD(vietbot_esp32s3_display);
+DECLARE_BOARD(FreenoveESP32S3Display);
