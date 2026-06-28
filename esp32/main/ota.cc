@@ -79,7 +79,7 @@ Header for check version request:
     Accept-Language     : vi-VN
     Content-Type        : application/json
 
-Check version URL: https://vietbot.vn/ota/
+Check version URL: https://api.tenclass.net/xiaozhi/ota/
 Method: POST
 Body for check version request data:
 
@@ -98,7 +98,7 @@ Body for check version request data:
     "features": 18
   },
   "application": {
-    "name": "vietbot",
+    "name": "xiaozhi",
     "version": "2.0.4",
     "compile_time": "Nov 16 2025T11:28:08Z",
     "idf_version": "v5.5.1",
@@ -170,7 +170,7 @@ Body for check version request data:
 Server response:
 {
     "mqtt": {
-        "endpoint": "mqtt.vietbot.vn",
+        "endpoint": "mqtt.xiaozhi.me",
         "client_id": "GID_test@@@90_70_69_19_9d_00@@@15040d5c-6f08-4244-9062-...",
         "username": "eyJpcCI6IjE3MS4yNDAu...",
         "password": "2wKM7rd6bgXz9oRj24QsOs/EI9Y7QF...",
@@ -178,7 +178,7 @@ Server response:
         "subscribe_topic": "null"
     },
     "websocket": {
-        "url": "wss://vietbot.vn/ws/",
+        "url": "wss://api.tenclass.net/xiaozhi/v1/",
         "token": "test-token"
     },
     "server_time": {
