@@ -99,19 +99,17 @@ private:
 
                 uint32_t press = now - down_start;
 
-                // long tap
+                // long tap → enter Wi-Fi config
                 if (press > 3000) {
                     self->EnterWifiConfigMode();
+                    last_tap = 0;
+                } else if (now - last_tap < 250) {
+                    // double tap → connect/disconnect chat (same as BOOT button)
+                    app.ToggleChatState();
+                    last_tap = 0;
                 } else {
-                    // double tap
-                    if (now - last_tap < 250) {
-                        app.StartListening();
-                        last_tap = 0;
-                    } else {
-                        // single tap
-                        app.ToggleChatState();
-                        last_tap = now;
-                    }
+                    // single tap → no-op (reserved for future use)
+                    last_tap = now;
                 }
             }
 
