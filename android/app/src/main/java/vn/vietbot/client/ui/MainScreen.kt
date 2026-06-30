@@ -46,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -71,6 +72,7 @@ import kotlinx.coroutines.launch
 import kotlin.coroutines.resume
 import android.content.Context
 import android.hardware.camera2.CameraDevice
+import android.util.Log
 import android.hardware.camera2.CameraManager
 import android.media.ImageReader
 import android.os.Handler
@@ -80,6 +82,7 @@ import android.os.Environment
 import android.content.ContentValues
 import vn.vietbot.client.R
 import vn.vietbot.client.data.CameraSource
+import vn.vietbot.client.data.MediaHistoryItem
 import vn.vietbot.client.data.SettingsRepository
 import vn.vietbot.client.mcp.SmartGlassesManager
 import vn.vietbot.client.ui.theme.AccentNeon
@@ -190,7 +193,7 @@ private fun MainScreenContent(
                     settingsRepository = settingsRepository,
                     modifier = Modifier.padding(innerPadding)
                 )
-                2 -> MediaContent(modifier = Modifier.padding(innerPadding))
+                2 -> MediaContent(modifier = Modifier.padding(innerPadding), settingsRepository = settingsRepository)
                 3 -> SettingsContent(
                     modifier = Modifier.padding(innerPadding),
                     settingsRepository = settingsRepository,
@@ -442,22 +445,127 @@ fun FeatureCard(
 }
 
 @Composable
-fun MediaContent(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
+fun MediaContent(
+    modifier: Modifier = Modifier,
+    settingsRepository: SettingsRepository? = null
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val repo = settingsRepository ?: remember { vn.vietbot.client.data.SettingsRepositoryImpl(context) }
+    var history by remember { mutableStateOf<List<MediaHistoryItem>>(emptyList()) }
+
+    // Refresh history when screen is shown (simple approach: load on first compose)
+    LaunchedEffect(Unit) {
+        history = repo.mediaHistory
+    }
+
+    if (history.isEmpty()) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            Text(text = "🎵", style = MaterialTheme.typography.displayLarge)
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = stringResource(R.string.media_developing),
-                style = MaterialTheme.typography.titleMedium,
-                color = TextSecondary
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(text = "🎵", style = MaterialTheme.typography.displayLarge)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Chưa có bài hát nào được phát.\nHãy thử: \"Phát bài Shape of You trên YouTube\"",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
         }
+    } else {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(12.dp)
+        ) {
+            Text(
+                text = "🎵 Lịch sử phát",
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp
+                ),
+                color = AccentNeon,
+                modifier = Modifier.shadow(
+                    elevation = 6.dp,
+                    ambientColor = AccentNeon.copy(alpha = 0.3f),
+                    spotColor = AccentNeon.copy(alpha = 0.4f)
+                )
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            history.forEachIndexed { index, item ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .clickable {
+                            // Replay: open YouTube with this song
+                            try {
+                                val encodedQuery = android.net.Uri.encode(item.songName)
+                                val intent = android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse("https://www.youtube.com/results?search_query=$encodedQuery")
+                                )
+                                intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(intent)
+
+                                // Update timestamp on replay
+                                val updated = history.toMutableList()
+                                updated[index] = item.copy(timestamp = System.currentTimeMillis())
+                                repo.mediaHistory = updated
+                                history = updated
+                            } catch (e: Exception) {
+                                Log.e("MediaContent", "Failed to replay: ${e.message}")
+                            }
+                        },
+                    colors = CardDefaults.cardColors(containerColor = BgCard),
+                    border = BorderStroke(1.dp, BorderNeon.copy(alpha = 0.3f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "▶",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = AccentNeon
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = item.songName,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.White,
+                                maxLines = 2
+                            )
+                            Text(
+                                text = formatAge(System.currentTimeMillis() - item.timestamp),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextMuted
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatAge(deltaMillis: Long): String {
+    val seconds = deltaMillis / 1000
+    return when {
+        seconds < 60 -> "vừa xong"
+        seconds < 3600 -> "${seconds / 60} phút trước"
+        seconds < 86400 -> "${seconds / 3600} giờ trước"
+        else -> "${seconds / 86400} ngày trước"
     }
 }
 

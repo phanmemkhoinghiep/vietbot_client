@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
@@ -16,15 +17,23 @@ import kotlinx.coroutines.launch
 class OpusStreamPlayer(
     private val sampleRate: Int,
     private val channels: Int,
-    frameSizeMs: Int
+    private val frameSizeMs: Int
 ) {
     companion object {
         private const val TAG = "OpusStreamPlayer"
+        // Jitter buffer: 8 PCM frames = ~480ms @ 60ms/frame
+        // Mirrors ESP32's MAX_PLAYBACK_TASKS_IN_QUEUE to decouple decode from output
+        private const val PLAYBACK_QUEUE_CAPACITY = 8
     }
 
     private var audioTrack: AudioTrack
     private val playerScope = CoroutineScope(Dispatchers.IO + Job())
     private var isPlaying = false
+    private var decoder: OpusDecoder? = null
+
+    // Jitter buffer: holds decoded PCM between decode-coroutine and output-coroutine
+    // Backed by Channel for FIFO ordering (matches ESP32's audio_playback_queue_)
+    private val playbackQueue = Channel<ByteArray>(capacity = PLAYBACK_QUEUE_CAPACITY)
 
     init {
         val channelConfig = if (channels == 1) AudioFormat.CHANNEL_OUT_MONO else AudioFormat.CHANNEL_OUT_STEREO
@@ -32,7 +41,7 @@ class OpusStreamPlayer(
             sampleRate,
             channelConfig,
             AudioFormat.ENCODING_PCM_16BIT
-        ) * 2 // Increase buffer size
+        ) * 4 // Increase buffer size 4x for streaming headroom (was 2x - caused underflow)
 
         audioTrack = AudioTrack.Builder()
             .setAudioAttributes(
@@ -53,22 +62,41 @@ class OpusStreamPlayer(
             .build()
     }
 
-    fun start(pcmFlow: Flow<ByteArray?>) {
+    fun start(opusFlow: Flow<ByteArray>) {
         if (!isPlaying) {
             isPlaying = true
             if (audioTrack.state == AudioTrack.STATE_INITIALIZED) {
                 audioTrack.play()
             }
 
+            // Create decoder here - dedicated to this player instance
+            decoder = OpusDecoder(sampleRate, channels, frameSizeMs)
+
+            // Coroutine 1: Decode (opus → PCM, push to playback queue)
+            // Runs independently - decode latency doesn't stall output
             playerScope.launch {
-                pcmFlow.collect { pcmData ->
-                    pcmData?.let {
-                        try {
-                            audioTrack.write(it, 0, it.size)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error writing to AudioTrack", e)
+                try {
+                    opusFlow.collect { opusData ->
+                        val pcmData = decoder?.decode(opusData)
+                        if (pcmData != null) {
+                            // Suspends if queue full (backpressure) - prevents OOM
+                            playbackQueue.send(pcmData)
                         }
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Decode coroutine error", e)
+                }
+            }
+
+            // Coroutine 2: Output (pop PCM → audioTrack.write)
+            // Dedicated to playback - blocking write doesn't stall decode
+            playerScope.launch {
+                try {
+                    for (pcmData in playbackQueue) {
+                        audioTrack.write(pcmData, 0, pcmData.size)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Output coroutine error", e)
                 }
             }
         }
@@ -85,6 +113,7 @@ class OpusStreamPlayer(
 
     fun release() {
         stop()
+        playbackQueue.close()
         audioTrack.release()
     }
 

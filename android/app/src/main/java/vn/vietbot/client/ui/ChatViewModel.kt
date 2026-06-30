@@ -17,6 +17,7 @@ import vn.vietbot.client.data.model.TransportType
 import vn.vietbot.client.data.model.toJson
 import vn.vietbot.client.mcp.SmartGlassesManager
 import vn.vietbot.client.mcp.McpServer
+import vn.vietbot.client.mcp.tools.YouTubeMcpTool
 // Disabled non-core MCP tools - imports commented out
 // import vn.vietbot.client.mcp.tools.AlarmTool
 // import vn.vietbot.client.mcp.tools.AppLauncherTool
@@ -80,7 +81,6 @@ class ChatViewMode @Inject constructor(
     private val translationManager = TranslationManager(context)
 
     var encoder: OpusEncoder? = null
-    var decoder: OpusDecoder? = null
     var recorder: AudioRecorder? = null
     var player: OpusStreamPlayer? = null
     var aborted: Boolean = false
@@ -133,12 +133,13 @@ class ChatViewMode @Inject constructor(
     // Disabled non-core tools (kept for future re-enable; permissions removed in
     // AndroidManifest.xml so they would crash at runtime even if registered).
     private val mcpServer = McpServer(context, glassesManager, settings, protocol).apply {
+        YouTubeMcpTool(context, settings).register(this) // YouTube playback - opens YouTube app via deep link
         // AlarmTool(context).register(this)         // disabled - out of voice/BLE scope
         // AppLauncherTool(context).register(this)   // disabled - out of voice/BLE scope
         // DeviceControlTool(context).register(this) // disabled - out of voice/BLE scope
         // ContactsTool(context).register(this)      // disabled - requires READ_CONTACTS/CALL_PHONE/SEND_SMS
         // NotificationTool(context).register(this)  // disabled - requires POST_NOTIFICATIONS
-        Log.i(TAG, "MCP tools registered (core only: camera/audio/glasses)")
+        Log.i(TAG, "MCP tools registered (core only: camera/audio/glasses/youtube)")
     }
 
     // Expose MCP server for lifecycle management
@@ -421,11 +422,7 @@ class ChatViewMode @Inject constructor(
                             val channels = 1
                             val frameSizeMs = 60
                             player = OpusStreamPlayer(sampleRate, channels, frameSizeMs)
-                            decoder = OpusDecoder(sampleRate, channels, frameSizeMs)
-                            player?.start(protocol!!.incomingAudioFlow.map {
-                                deviceState = DeviceState.SPEAKING
-                                decoder?.decode(it)
-                            })
+                            player?.start(protocol!!.incomingAudioFlow)
                         }
                     }
                 } else {
@@ -479,13 +476,11 @@ class ChatViewMode @Inject constructor(
                 player?.stop()
                 protocol?.dispose()
                 encoder?.release()
-                decoder?.release()
             } catch (e: Exception) {
                 Log.e(TAG, "Error during disconnect", e)
             }
             protocol = null
             encoder = null
-            decoder = null
             recorder = null
             player = null
             mcpServer.release()

@@ -38,6 +38,10 @@
     <!-- Wi-Fi Direct / Nearby Devices for WiFi P2P -->
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" tools:targetApi="33" />
 
+    <!-- Remove phone call permissions merged from Oudmon Glasses SDK AAR -->
+    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove" />
+
     <!-- Bluetooth features -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 

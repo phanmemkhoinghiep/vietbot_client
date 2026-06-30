@@ -29,7 +29,7 @@ abstract class Protocol {
         kotlinx.coroutines.channels.Channel.BUFFERED
     ).also { jsonChannel = it }.receiveAsFlow()
     val incomingAudioFlow: kotlinx.coroutines.flow.Flow<ByteArray> = kotlinx.coroutines.channels.Channel<ByteArray>(
-        kotlinx.coroutines.channels.Channel.BUFFERED
+        capacity = 256  // 256 slots (~4s at 60ms frames) — prevents silent drop during burst from server
     ).also { audioChannel = it }.receiveAsFlow()
     val audioChannelStateFlow = MutableSharedFlow<AudioState>()
     val networkErrorFlow = MutableSharedFlow<String>()

@@ -10,6 +10,15 @@ import javax.inject.Singleton
 
 enum class CameraSource { PHONE, GLASSES }
 
+/**
+ * Media playback history item for tracking YouTube/music playback
+ */
+data class MediaHistoryItem(
+    val songName: String,
+    val timestamp: Long,
+    val source: String = "youtube"
+)
+
 interface SettingsRepository {
     var transportType: TransportType
     var mqttConfig: MqttConfig?
@@ -32,6 +41,9 @@ interface SettingsRepository {
     // Runtime flags - NOT persisted (set by SmartGlassesManager at runtime)
     var isGlassesConnected: Boolean
     var glassesBatteryLevel: Int
+
+    // Media playback history (YouTube, music, etc.) - persisted as JSON array
+    var mediaHistory: List<MediaHistoryItem>
 
     // Persist settings to storage
     fun save()
@@ -58,6 +70,8 @@ class SettingsRepositoryImpl @Inject constructor(
         private const val KEY_USE_OFFLINE_TTS = "use_offline_tts"
         private const val KEY_GLASSES_ADDRESS = "glasses_address"
         private const val KEY_GLASSES_NAME = "glasses_name"
+        private const val KEY_MEDIA_HISTORY = "media_history"
+        private const val MAX_MEDIA_HISTORY = 20  // Keep last 20 items
     }
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -143,6 +157,41 @@ class SettingsRepositoryImpl @Inject constructor(
     override var glassesName: String?
         get() = prefs.getString(KEY_GLASSES_NAME, null)
         set(value) { prefs.edit().putString(KEY_GLASSES_NAME, value).apply() }
+
+    override var mediaHistory: List<MediaHistoryItem>
+        get() {
+            val json = prefs.getString(KEY_MEDIA_HISTORY, null) ?: return emptyList()
+            return try {
+                val jsonArray = org.json.JSONArray(json)
+                val items = mutableListOf<MediaHistoryItem>()
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    items.add(
+                        MediaHistoryItem(
+                            songName = obj.optString("songName", ""),
+                            timestamp = obj.optLong("timestamp", 0L),
+                            source = obj.optString("source", "youtube")
+                        )
+                    )
+                }
+                items
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+        set(value) {
+            val jsonArray = org.json.JSONArray()
+            // Keep only the most recent MAX_MEDIA_HISTORY items
+            value.take(MAX_MEDIA_HISTORY).forEach { item ->
+                val obj = org.json.JSONObject().apply {
+                    put("songName", item.songName)
+                    put("timestamp", item.timestamp)
+                    put("source", item.source)
+                }
+                jsonArray.put(obj)
+            }
+            prefs.edit().putString(KEY_MEDIA_HISTORY, jsonArray.toString()).apply()
+        }
 
     override fun save() {
         // All settings are saved immediately via SharedPreferences
