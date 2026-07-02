@@ -288,8 +288,11 @@ class ChatViewMode @Inject constructor(
                         wsProtocol = WebsocketProtocol(deviceInfo, otaResult.wsUrl, otaResult.token ?: "test-token")
                     }
                     is OtaApiResult.Error -> {
-                        Log.e(TAG, "OTA API error: ${otaResult.message}, falling back to direct WS")
-                        wsProtocol = WebsocketProtocol(deviceInfo, settings.webSocketUrl ?: "wss://vietbot.vn/ws/", "test-token")
+                        Log.e(TAG, "OTA API error: ${otaResult.message}")
+                        display.setChatMessage("system", "Không thể xác thực thiết bị!\nLỗi: ${otaResult.message}\n\nVui lòng kiểm tra kết nối mạng và thử lại.")
+                        _isConnecting.value = false
+                        deviceState = DeviceState.IDLE
+                        return@launch
                     }
                 }
             }
