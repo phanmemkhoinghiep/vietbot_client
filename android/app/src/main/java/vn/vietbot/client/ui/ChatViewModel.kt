@@ -80,6 +80,23 @@ class ChatViewMode @Inject constructor(
     // Translation manager for offline TTS playback
     private val translationManager = TranslationManager(context)
 
+    /**
+     * Ensure OpusStreamPlayer is started for server audio playback.
+     * Called on connect, tts.start, and translation mode activation.
+     */
+    private fun ensureAudioPlayerActive() {
+        if (player == null && protocol?.isAudioChannelOpened() == true) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val sampleRate = 24000
+                val channels = 1
+                val frameSizeMs = 60
+                player = OpusStreamPlayer(sampleRate, channels, frameSizeMs)
+                player?.start(protocol!!.incomingAudioFlow)
+                Log.i(TAG, "OpusStreamPlayer started for audio playback")
+            }
+        }
+    }
+
     var encoder: OpusEncoder? = null
     var recorder: AudioRecorder? = null
     var player: OpusStreamPlayer? = null
@@ -300,6 +317,7 @@ class ChatViewMode @Inject constructor(
                                     val state = json.optString("state")
                                     when (state) {
                                         "start" -> {
+                                            ensureAudioPlayerActive()
                                             schedule {
                                                 aborted = false
                                                 if (deviceState == DeviceState.IDLE || deviceState == DeviceState.LISTENING) {

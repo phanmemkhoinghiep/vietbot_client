@@ -71,16 +71,21 @@ class OpusStreamPlayer(
 
             // Create decoder here - dedicated to this player instance
             decoder = OpusDecoder(sampleRate, channels, frameSizeMs)
+            Log.i(TAG, "OpusStreamPlayer started: sampleRate=$sampleRate channels=$channels frameSizeMs=$frameSizeMs")
 
             // Coroutine 1: Decode (opus → PCM, push to playback queue)
             // Runs independently - decode latency doesn't stall output
             playerScope.launch {
                 try {
                     opusFlow.collect { opusData ->
+                        Log.d(TAG, "📥 Decoding opus frame: ${opusData.size} bytes")
                         val pcmData = decoder?.decode(opusData)
                         if (pcmData != null) {
                             // Suspends if queue full (backpressure) - prevents OOM
                             playbackQueue.send(pcmData)
+                            Log.d(TAG, "✅ PCM enqueued: ${pcmData.size} bytes")
+                        } else {
+                            Log.w(TAG, "⚠️ Decode returned null")
                         }
                     }
                 } catch (e: Exception) {
@@ -93,12 +98,15 @@ class OpusStreamPlayer(
             playerScope.launch {
                 try {
                     for (pcmData in playbackQueue) {
+                        Log.d(TAG, "🔊 Writing PCM to AudioTrack: ${pcmData.size} bytes")
                         audioTrack.write(pcmData, 0, pcmData.size)
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Output coroutine error", e)
                 }
             }
+        } else {
+            Log.w(TAG, "start() called but already playing")
         }
     }
 

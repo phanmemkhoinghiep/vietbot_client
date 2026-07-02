@@ -28,8 +28,10 @@ abstract class Protocol {
     val incomingJsonFlow: kotlinx.coroutines.flow.Flow<JSONObject> = kotlinx.coroutines.channels.Channel<JSONObject>(
         kotlinx.coroutines.channels.Channel.BUFFERED
     ).also { jsonChannel = it }.receiveAsFlow()
+    // 🔥 Gemini Live 3.1: High-rate audio streaming (150+ frames in 2s burst)
+    // Need larger buffer to handle burst without dropping frames
     val incomingAudioFlow: kotlinx.coroutines.flow.Flow<ByteArray> = kotlinx.coroutines.channels.Channel<ByteArray>(
-        capacity = 256  // 256 slots (~4s at 60ms frames) — prevents silent drop during burst from server
+        capacity = 1024  // 1024 slots (~16s at 60ms frames) — handles Gemini Live 3.1 burst
     ).also { audioChannel = it }.receiveAsFlow()
     val audioChannelStateFlow = MutableSharedFlow<AudioState>()
     val networkErrorFlow = MutableSharedFlow<String>()

@@ -1,6 +1,7 @@
 package vn.vietbot.client
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -26,12 +27,23 @@ import vn.vietbot.client.mcp.SmartGlassesManager
 import vn.vietbot.client.ui.ChatViewMode
 import vn.vietbot.client.ui.MainScreen
 import vn.vietbot.client.ui.theme.VietbotTheme
+import vn.vietbot.client.util.LocaleHelper
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity(), LifecycleOwner {
 
     private val chatViewModel: ChatViewMode by viewModels()
     private var lifecycleObserver: LifecycleEventObserver? = null
+
+    override fun attachBaseContext(newBase: Context) {
+        // Apply persisted app language (en/vi) before resources are inflated
+        try {
+            super.attachBaseContext(LocaleHelper.wrap(newBase))
+        } catch (e: Exception) {
+            // Some OEM ROMs (MIUI) throw on createConfigurationContext — fall back
+            super.attachBaseContext(newBase)
+        }
+    }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()

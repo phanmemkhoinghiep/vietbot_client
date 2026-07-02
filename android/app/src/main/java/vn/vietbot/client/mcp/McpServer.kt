@@ -31,7 +31,6 @@ class McpServer(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val cameraTools = CameraMcpTools(context)
     private val glassesCameraTools: GlassesCameraTools? = glassesManager?.let { GlassesCameraTools(context, it) }
-    private val audioTools = AudioMcpTools(context)
     private var requestId = AtomicInteger(1)
 
     // Camera source cache - updated when settings change
@@ -134,9 +133,6 @@ class McpServer(
 
         // Add glasses camera tools if glasses are connected
         glassesCameraTools?.let { tools.addAll(it.getTools()) }
-
-        // Add audio tools
-        tools.addAll(audioTools.getTools())
 
         // Add dynamically registered tools
         toolDefinitions.forEach { toolDef ->
@@ -291,12 +287,6 @@ class McpServer(
             val result = cameraTools.executeTool(toolName, jsonArgs)
             cacheImageFromResult(result)
             return result
-        }
-
-        // Check if it's an audio tool
-        if (toolName.startsWith("self.audio.")) {
-            val jsonArgs = JSONObject(args.toJsonString())
-            return audioTools.executeTool(toolName, jsonArgs)
         }
 
         // Check if it's a translate tool (server-side handled, no client impl)
@@ -458,39 +448,21 @@ class McpServer(
      */
     fun release() {
         cameraTools.release()
-        audioTools.release()
     }
 
     /**
      * Stop all recording operations immediately (for lifecycle events - synchronous)
      */
     fun stopAllRecordingImmediate() {
-        audioTools.stopAllRecordingImmediate()
-        cameraTools.stopAllVideoRecording()
+        // No recording tools remain (video removed)
     }
 
     /**
      * Stop all recording operations (for lifecycle events - async)
      */
     suspend fun stopAllRecording(): String {
-        val audioResult = audioTools.stopAllRecording()
-        val videoResult = cameraTools.stopAllVideoRecording()
-
-        val messages = mutableListOf<String>()
-        if (!audioResult.isError) {
-            val textContent = audioResult.content.firstOrNull()
-            if (textContent is McpContent.TextContent) {
-                messages.add(textContent.text)
-            }
-        }
-        if (!videoResult.isError) {
-            val textContent = videoResult.content.firstOrNull()
-            if (textContent is McpContent.TextContent) {
-                messages.add(textContent.text)
-            }
-        }
-
-        return if (messages.isEmpty()) "No recording to stop" else messages.joinToString("\n")
+        // No recording tools remain (video removed)
+        return "No recording to stop"
     }
 
     /**

@@ -42,4 +42,7 @@
     <string name="fast_translation_desc">Use device local TTS. Lower latency, voice quality depends on the device.</string>
     <string name="slow_translation">High-quality translation (server audio)</string>
     <string name="slow_translation_desc">Wait for the server to synthesize audio. Higher quality but higher latency.</string>
+    <string name="app_language">App Language</string>
+    <string name="lang_vietnamese">Tiếng Việt</string>
+    <string name="lang_english">English</string>
 </resources>

@@ -607,8 +607,10 @@ fun SettingsContent(
     var selectedBubbleColor by remember { mutableStateOf(settingsRepository.bubbleColorHex) }
     var cameraSource by remember { mutableStateOf(settingsRepository.cameraSource) }
     var useOfflineTts by remember { mutableStateOf(settingsRepository.useOfflineTts) }
+    var appLanguage by remember { mutableStateOf(settingsRepository.appLanguage) }
     // Use parameter isGlassesConnected instead of local state
     var glassesBatteryLevel by remember { mutableIntStateOf(settingsRepository.glassesBatteryLevel) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     Column(
         modifier = modifier
@@ -631,6 +633,41 @@ fun SettingsContent(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // Language Section
+        NeonSettingsSection(title = stringResource(R.string.app_language)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                CameraSourceChip(
+                    label = "🇻🇳 Tiếng Việt",
+                    emoji = "",
+                    isSelected = appLanguage == vn.vietbot.client.util.LocaleHelper.LANG_VIETNAMESE,
+                    onClick = {
+                        appLanguage = vn.vietbot.client.util.LocaleHelper.LANG_VIETNAMESE
+                        settingsRepository.appLanguage = vn.vietbot.client.util.LocaleHelper.LANG_VIETNAMESE
+                        vn.vietbot.client.util.LocaleHelper.setLanguage(context, vn.vietbot.client.util.LocaleHelper.LANG_VIETNAMESE)
+                        (context as? android.app.Activity)?.recreate()
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                CameraSourceChip(
+                    label = "🇬🇧 English",
+                    emoji = "",
+                    isSelected = appLanguage == vn.vietbot.client.util.LocaleHelper.LANG_ENGLISH,
+                    onClick = {
+                        appLanguage = vn.vietbot.client.util.LocaleHelper.LANG_ENGLISH
+                        settingsRepository.appLanguage = vn.vietbot.client.util.LocaleHelper.LANG_ENGLISH
+                        vn.vietbot.client.util.LocaleHelper.setLanguage(context, vn.vietbot.client.util.LocaleHelper.LANG_ENGLISH)
+                        (context as? android.app.Activity)?.recreate()
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Glasses Connection Section - Neon Style
         NeonSettingsSection(title = "Nguồn Camera") {

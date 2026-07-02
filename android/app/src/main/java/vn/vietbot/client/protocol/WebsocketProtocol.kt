@@ -34,7 +34,9 @@ class WebsocketProtocol(private val deviceInfo: DeviceInfo,
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)  // Disable read timeout for continuous WebSocket streaming
+        .writeTimeout(0, TimeUnit.SECONDS) // Disable write timeout
+        .pingInterval(30, TimeUnit.SECONDS) // WebSocket keepalive ping
         .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
         .hostnameVerifier { _, _ -> true }
         .build()
@@ -145,7 +147,13 @@ class WebsocketProtocol(private val deviceInfo: DeviceInfo,
 
                 override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
                     scope.launch {
-                        audioChannel.send(bytes.toByteArray())
+                        try {
+                            val audioData = bytes.toByteArray()
+                            Log.d(TAG, "📥 WebSocket audio received: ${audioData.size} bytes")
+                            audioChannel.send(audioData)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to process audio frame", e)
+                        }
                     }
                 }
 

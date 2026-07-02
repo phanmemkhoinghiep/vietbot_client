@@ -34,6 +34,9 @@ interface SettingsRepository {
     // Translation TTS mode: true = offline (local TTS, faster), false = server audio (slower, higher quality)
     var useOfflineTts: Boolean
 
+    // App language override: "vi", "en", or "" (follow system)
+    var appLanguage: String
+
     // Saved glasses device info
     var glassesAddress: String?
     var glassesName: String?
@@ -68,6 +71,7 @@ class SettingsRepositoryImpl @Inject constructor(
         private const val KEY_BUBBLE_COLOR = "bubble_color"
         private const val KEY_CAMERA_SOURCE = "camera_source"
         private const val KEY_USE_OFFLINE_TTS = "use_offline_tts"
+        private const val KEY_APP_LANGUAGE = "app_language"
         private const val KEY_GLASSES_ADDRESS = "glasses_address"
         private const val KEY_GLASSES_NAME = "glasses_name"
         private const val KEY_MEDIA_HISTORY = "media_history"
@@ -149,6 +153,10 @@ class SettingsRepositoryImpl @Inject constructor(
     override var useOfflineTts: Boolean
         get() = prefs.getBoolean(KEY_USE_OFFLINE_TTS, true)  // default: fast translation
         set(value) { prefs.edit().putBoolean(KEY_USE_OFFLINE_TTS, value).apply() }
+
+    override var appLanguage: String
+        get() = prefs.getString(KEY_APP_LANGUAGE, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_APP_LANGUAGE, value).apply() }
 
     override var glassesAddress: String?
         get() = prefs.getString(KEY_GLASSES_ADDRESS, null)

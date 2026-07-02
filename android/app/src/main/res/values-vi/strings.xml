@@ -41,4 +41,7 @@
     <string name="fast_translation_desc">Dùng TTS có sẵn trên thiết bị. Phản hồi nhanh, chất lượng giọng tuỳ máy.</string>
     <string name="slow_translation">Dịch chậm (audio từ server)</string>
     <string name="slow_translation_desc">Chờ server tổng hợp audio. Chất lượng cao hơn, chậm hơn.</string>
+    <string name="app_language">Ngôn ngữ ứng dụng</string>
+    <string name="lang_vietnamese">Tiếng Việt</string>
+    <string name="lang_english">English</string>
 </resources>
