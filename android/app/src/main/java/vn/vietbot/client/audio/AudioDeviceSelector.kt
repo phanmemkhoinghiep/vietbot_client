@@ -14,182 +14,124 @@ import vn.vietbot.client.data.SpeakerOutput
 object AudioDeviceSelector {
 
     /**
-     * Get available microphone sources based on connected hardware.
-     * Includes Glasses option only when glasses are connected via BLE (HFP profile).
+     * Get available microphone sources.
      *
-     * Covers:
-     * - BUILTIN: phone mic (always present)
-     * - BLUETOOTH_SCO: BT headset mic (HFP) AND wired 3.5mm headset mic (TYPE_WIRED_HEADSET)
-     * - USB: USB audio device mic
-     * - GLASSES: HeyCyan BLE glasses (HFP)
+     * Simplified — only 2 options:
+     * - BUILTIN: phone mic (system-routed: BT SCO if headset connected, phone mic otherwise)
+     * - BLUETOOTH_SCO: explicit headset/wired microphone pin
+     *
+     * User testing: BUILTIN selected = OS picks whichever mic is active
+     * (BT SCO mic if BT headset connected, glasses mic if glasses connected,
+     * phone mic otherwise). BLUETOOTH_SCO forces explicit pinning for cases
+     * where OS routes wrong mic.
+     *
+     * Glasses enum removed; BT routing handled by system for BUILTIN.
      */
     fun getAvailableMicSources(context: Context, isGlassesConnected: Boolean): List<MicSource> {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val devices = am.getDevices(AudioManager.GET_DEVICES_INPUTS)
-        val sources = mutableSetOf<MicSource>()
+        val outputs = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+        val inputs = am.getDevices(AudioManager.GET_DEVICES_INPUTS)
 
-        var hasBluetoothInput = false
-        var hasWiredHeadsetInput = false
-        devices.forEach { dev ->
-            when (dev.type) {
-                AudioDeviceInfo.TYPE_BUILTIN_MIC -> sources.add(MicSource.BUILTIN)
-                AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> {
-                    sources.add(MicSource.BLUETOOTH_SCO)
-                    hasBluetoothInput = true
-                }
-                AudioDeviceInfo.TYPE_WIRED_HEADSET -> {
-                    // Wired 3.5mm headset mic — same control path as BT SCO
-                    sources.add(MicSource.BLUETOOTH_SCO)
-                    hasWiredHeadsetInput = true
-                }
-                AudioDeviceInfo.TYPE_USB_DEVICE,
-                AudioDeviceInfo.TYPE_USB_HEADSET,
-                AudioDeviceInfo.TYPE_USB_ACCESSORY -> sources.add(MicSource.USB)
-                else -> {}
-            }
+        // Check if any external mic source is present (wired headset, BT SCO input, USB input)
+        val hasExternalMic = inputs.any {
+            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+            it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+            it.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
+            it.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+            it.type == AudioDeviceInfo.TYPE_USB_ACCESSORY
         }
 
-        // If no explicit headset input but Bluetooth A2DP output exists,
-        // the BT headset mic may only become available after starting SCO.
-        // Add BLUETOOTH_SCO so user can select it (selection triggers SCO start).
-        if (!hasBluetoothInput && !hasWiredHeadsetInput) {
-            val outputDevices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-            val hasBluetoothA2dp = outputDevices.any { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
-            if (hasBluetoothA2dp) {
-                sources.add(MicSource.BLUETOOTH_SCO)
-            }
+        // If BT A2DP output exists but no BT SCO input discovered yet,
+        // still expose BLUETOOTH_SCO option (system will start SCO on selection).
+        val hasBtA2dpOutput = outputs.any {
+            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
         }
 
-        Log.i(
-            "AudioDeviceSelector",
-            "getAvailableMicSources → $sources " +
-                "(btInput=$hasBluetoothInput, wiredInput=$hasWiredHeadsetInput)"
-        )
-
-        if (isGlassesConnected) sources.add(MicSource.GLASSES)
-        return sources.toList().sortedBy { it.ordinal }
+        return buildList {
+            add(MicSource.BUILTIN)  // always available (phone mic + OS-routed external)
+            if (hasExternalMic || hasBtA2dpOutput) {
+                add(MicSource.BLUETOOTH_SCO)
+            }
+        }
     }
 
     /**
-     * Get available speaker outputs based on connected hardware.
-     * Includes Glasses option only when glasses are connected (A2DP/HFP).
+     * Get available speaker outputs.
      *
-     * Covers:
+     * Only 2 options:
      * - BUILTIN_SPEAKER: phone loudspeaker (always present)
      * - EARPIECE: phone receiver (above screen, for calls)
-     * - BLUETOOTH_A2DP: BT headset/stereo, BT SCO mono, AND wired 3.5mm headset
-     * - USB: USB audio device
-     * - GLASSES: HeyCyan BLE glasses (A2DP/HFP)
+     *
+     * Selecting "BUILTIN_SPEAKER" routes to whatever the system already chose
+     * (e.g. BT A2DP if a BT speaker is connected, or phone speaker otherwise).
+     * Selecting "EARPIECE" forces the receiver (earpiece).
+     *
+     * Glasses enum removed; BT A2DP/USB enum removed — system handles routing
+     * automatically when BUILTIN_SPEAKER is selected.
      */
     fun getAvailableSpeakerOutputs(context: Context, isGlassesConnected: Boolean): List<SpeakerOutput> {
-        val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-        val outputs = mutableSetOf<SpeakerOutput>()
-
-        var hasBluetoothOutput = false
-        var hasWiredHeadsetOutput = false
-        devices.forEach { dev ->
-            when (dev.type) {
-                AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> outputs.add(SpeakerOutput.BUILTIN_SPEAKER)
-                AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> outputs.add(SpeakerOutput.EARPIECE)
-                AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> {
-                    outputs.add(SpeakerOutput.BLUETOOTH_A2DP)
-                    hasBluetoothOutput = true
-                }
-                AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> {
-                    // BT combo headset speaker (HFP mono) - same path as A2DP option
-                    outputs.add(SpeakerOutput.BLUETOOTH_A2DP)
-                    hasBluetoothOutput = true
-                }
-                AudioDeviceInfo.TYPE_WIRED_HEADSET -> {
-                    // Wired 3.5mm headset speaker — user typically pairs this with the BT SCO
-                    // mic option (split mic on phone if headset has separate TRRS mic pin).
-                    outputs.add(SpeakerOutput.BLUETOOTH_A2DP)
-                    hasWiredHeadsetOutput = true
-                }
-                AudioDeviceInfo.TYPE_USB_DEVICE,
-                AudioDeviceInfo.TYPE_USB_HEADSET,
-                AudioDeviceInfo.TYPE_USB_ACCESSORY -> outputs.add(SpeakerOutput.USB)
-                else -> {}
-            }
-        }
-
-        // If no Bluetooth/wired output enumerated but Bluetooth adapter is on with paired headset,
-        // still add BLUETOOTH_A2DP so user can try selecting it.
-        if (!hasBluetoothOutput && !hasWiredHeadsetOutput && am.isBluetoothA2dpOn) {
-            outputs.add(SpeakerOutput.BLUETOOTH_A2DP)
-        }
-
-        Log.i(
-            "AudioDeviceSelector",
-            "getAvailableSpeakerOutputs → $outputs " +
-                "(btOut=$hasBluetoothOutput, wiredOut=$hasWiredHeadsetOutput)"
-        )
-
-        if (isGlassesConnected) outputs.add(SpeakerOutput.GLASSES)
-        return outputs.toList().sortedBy { it.ordinal }
+        // Always include both built-in options
+        return listOf(SpeakerOutput.BUILTIN_SPEAKER, SpeakerOutput.EARPIECE)
     }
 
     /**
-     * Find AudioDeviceInfo for a specific MicSource to pass to AudioRecord.Builder.setPreferredDevice().
-     * For Bluetooth SCO, the device may not be enumerated until SCO is started.
-     * For wired headset, TYPE_WIRED_HEADSET is returned.
+     * Find AudioDeviceInfo for a specific MicSource.
+     *
+     * Simplified:
+     * - BUILTIN → null (let OS pick — BT SCO mic if BT headset connected,
+     *   glasses mic if glasses connected, phone mic otherwise)
+     * - BLUETOOTH_SCO → pin to TYPE_BLUETOOTH_SCO or TYPE_WIRED_HEADSET
+     *   (3.5mm TRRS with mic pin).
+     *
+     * Per user testing: selecting BUILTIN routes to whatever mic is currently
+     * active (BT SCO when headset is connected, glasses mic when glasses
+     * connected, else phone mic). BLUETOOTH_SCO is an explicit override.
      */
     fun findInputDevice(context: Context, source: MicSource): AudioDeviceInfo? {
-        if (source == MicSource.GLASSES) return findGlassesInputDevice(context)
-
         val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         return when (source) {
-            MicSource.BUILTIN ->
-                am.getDevices(AudioManager.GET_DEVICES_INPUTS).firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
+            MicSource.BUILTIN -> null  // OS default — whatever mic is connected
             MicSource.BLUETOOTH_SCO -> {
-                // Check both Bluetooth SCO and Wired Headset (3.5mm TRRS)
+                // Try explicit BT SCO input first, fall back to wired headset
                 val device = am.getDevices(AudioManager.GET_DEVICES_INPUTS)
-                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET }
+                    .firstOrNull {
+                        it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET
+                    }
                 if (device != null) return device
-                // For Bluetooth SCO: start SCO if not already active, then re-query
+                // BT SCO not enumerated yet → start SCO so input becomes available
                 if (am.isBluetoothScoAvailableOffCall && !am.isBluetoothScoOn) {
                     am.startBluetoothSco()
                     Log.i("AudioDeviceSelector", "Started Bluetooth SCO to enumerate headset mic")
                 }
                 am.getDevices(AudioManager.GET_DEVICES_INPUTS)
-                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET }
+                    .firstOrNull {
+                        it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                        it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET
+                    }
             }
-            MicSource.USB ->
-                am.getDevices(AudioManager.GET_DEVICES_INPUTS)
-                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_USB_DEVICE }
-            else -> null
         }
     }
 
     /**
-     * Find AudioDeviceInfo for a specific SpeakerOutput to pass to AudioTrack.Builder.setPreferredDevice().
-     * For Bluetooth, prefer A2DP (stereo), fall back to SCO (mono headset).
+     * Find AudioDeviceInfo for a specific SpeakerOutput.
+     *
+     * Simplified:
+     * - BUILTIN_SPEAKER → null (let OS pick whatever default: BT A2DP, glasses, phone speaker)
+     * - EARPIECE → pin to TYPE_BUILTIN_EARPIECE (phone receiver, force)
+     *
+     * Per user testing:
+     *   - BUILTIN_SPEAKER routes through whatever Android already chose (BT A2DP if connected, glasses if connected, else phone).
+     *   - EARPIECE forces receiver.
+     * No more "BLUETOOTH_A2DP" / "USB" / "GLASSES" options.
      */
     fun findOutputDevice(context: Context, output: SpeakerOutput): AudioDeviceInfo? {
-        if (output == SpeakerOutput.GLASSES) return findGlassesOutputDevice(context)
-
         val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         return when (output) {
-            SpeakerOutput.BUILTIN_SPEAKER ->
-                am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+            SpeakerOutput.BUILTIN_SPEAKER -> null  // OS default (BT/glasses/phone auto-routed)
             SpeakerOutput.EARPIECE ->
-                am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
-            SpeakerOutput.BLUETOOTH_A2DP -> {
-                // Priority: A2DP (stereo) → SCO (mono BT) → Wired headset (3.5mm)
                 am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
-                    ?: am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                        .firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
-                    ?: am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                        .firstOrNull { it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET }
-            }
-            SpeakerOutput.USB ->
-                am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_USB_DEVICE
-                        || it.type == AudioDeviceInfo.TYPE_USB_HEADSET
-                        || it.type == AudioDeviceInfo.TYPE_USB_ACCESSORY }
-            else -> null
+                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
         }
     }
 
@@ -198,12 +140,5 @@ object AudioDeviceSelector {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         return am.getDevices(AudioManager.GET_DEVICES_INPUTS)
             .firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO && it.productName?.contains("HeyCyan", true) == true }
-    }
-
-    /** Find HeyCyan glasses output device (Bluetooth A2DP with product name containing "HeyCyan") */
-    private fun findGlassesOutputDevice(context: Context): AudioDeviceInfo? {
-        val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        return am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-            .firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP && it.productName?.contains("HeyCyan", true) == true }
     }
 }

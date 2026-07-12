@@ -53,28 +53,17 @@ class OpusStreamPlayer(
             AudioFormat.ENCODING_PCM_16BIT
         ) * 4 // Increase buffer size 4x for streaming headroom (was 2x - caused underflow)
 
-        // Build AudioAttributes based on selected output.
-        // VOICE_COMMUNICATION routes audio through earpiece/receiver (NOT A2DP).
-        // When user selects BT A2DP or wired headset, use MEDIA usage so the
-        // audio actually plays through the chosen external device.
-        val (usage, contentType) = when (settingsRepository.speakerOutput) {
-            SpeakerOutput.BLUETOOTH_A2DP,
-            SpeakerOutput.GLASSES,
-            SpeakerOutput.USB -> {
-                // External output: route via MEDIA so setPreferredDevice(BT_A2DP) works.
-                Log.i(TAG, "📣 Using USAGE_MEDIA for external speaker output (BT/USB/Glasses)")
-                AudioAttributes.USAGE_MEDIA to AudioAttributes.CONTENT_TYPE_SPEECH
-            }
-            else -> {
-                // Built-in speaker / earpiece: VOICE_COMMUNICATION for AEC compatibility.
-                Log.i(TAG, "🔊 Using USAGE_VOICE_COMMUNICATION for built-in speaker/earpiece")
-                AudioAttributes.USAGE_VOICE_COMMUNICATION to AudioAttributes.CONTENT_TYPE_SPEECH
-            }
-        }
+        // Build AudioAttributes:
+        // - VOICE_COMMUNICATION for AEC compatibility (default — used for both
+        //   BUILTIN_SPEAKER and EARPIECE).
+        // - When the system already routes to external (BT A2DP/glasses etc.)
+        //   via BUILTIN_SPEAKER selection, VOICE_COMMUNICATION still works
+        //   because Android handles routing internally.
         val audioAttributes = AudioAttributes.Builder()
-            .setUsage(usage)
-            .setContentType(contentType)
+            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
             .build()
+        Log.i(TAG, "🔊 SpeakerOutput=${settingsRepository.speakerOutput}, usage=VOICE_COMMUNICATION")
 
         val audioFormat = AudioFormat.Builder()
             .setSampleRate(sampleRate)
@@ -94,9 +83,9 @@ class OpusStreamPlayer(
 
         audioTrack = builder.build()
 
-        // AudioTrack.setPreferredDevice() requires API 23+ (minSdk 24 OK).
-        // We apply this AFTER building AudioTrack to avoid Kotlin not finding
-        // AudioTrack.Builder.setPreferredDevice() at API 26 on some SDK stubs.
+        // Apply setPreferredDevice() only when we have an explicit device
+        // (e.g. EARPIECE → force receiver). For BUILTIN_SPEAKER we leave OS to
+        // pick whatever is connected (BT A2DP, glasses, etc.) automatically.
         if (preferredDevice != null && android.os.Build.VERSION.SDK_INT >= 23) {
             val setResult = audioTrack.setPreferredDevice(preferredDevice)
             Log.i(
@@ -104,37 +93,16 @@ class OpusStreamPlayer(
                 "🎯 setPreferredDevice(${preferredDevice.productName}, type=${preferredDevice.type}) " +
                     "→ success=$setResult, speakerOutput=$selectedOutput"
             )
-            // Also check actual routing after play()
-            val actualRoutedDevice = audioTrack.getRoutedDevice()
+        } else {
             Log.i(
                 TAG,
-                "📊 AudioTrack.getRoutedDevice() = " +
-                    (actualRoutedDevice?.productName?.let { "$it (type=${actualRoutedDevice.type})" } ?: "null")
-            )
-        } else {
-            Log.w(
-                TAG,
-                "⚠️ NO preferredDevice (selectedOutput=$selectedOutput, " +
-                    "availableDevices=${AudioDeviceSelector.getAvailableSpeakerOutputs(context, false).joinToString { it.name }})"
+                "🎯 No preferred device (speakerOutput=$selectedOutput) → OS picks routed output automatically"
             )
         }
 
-        // Bluetooth SCO handling for headset profile (HFP mono)
-        // Start SCO ONLY for actual Bluetooth devices, NOT wired headsets.
-        // Wired headsets (TYPE_WIRED_HEADSET) don't use SCO.
-        if ((selectedOutput == SpeakerOutput.BLUETOOTH_A2DP || selectedOutput == SpeakerOutput.GLASSES)
-            && preferredDevice != null
-            && preferredDevice.type != AudioDeviceInfo.TYPE_WIRED_HEADSET) {
-            val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            audioManager = am
-            // For Bluetooth SCO (headset/handsfree profile), need explicit start
-            if (am.isBluetoothScoAvailableOffCall && !am.isBluetoothScoOn) {
-                bluetoothScoStarted = true
-                am.isBluetoothScoOn = true
-                am.startBluetoothSco()
-                Log.i(TAG, "Bluetooth SCO started for output: $selectedOutput, device: ${preferredDevice.productName}")
-            }
-        }
+        // Bluetooth SCO handling removed — system handles BT A2DP routing
+        // internally for VOICE_COMMUNICATION usage via setPreferredDevice.
+        // We no longer need explicit startBluetoothSco() / stopBluetoothSco().
     }
 
     fun start(opusFlow: Flow<ByteArray>) {
@@ -198,14 +166,7 @@ class OpusStreamPlayer(
         stop()
         playbackQueue.close()
         audioTrack.release()
-
-        // Stop Bluetooth SCO if we started it
-        if (bluetoothScoStarted) {
-            audioManager?.stopBluetoothSco()
-            audioManager?.isBluetoothScoOn = false
-            bluetoothScoStarted = false
-            Log.i(TAG, "Bluetooth SCO stopped")
-        }
+        // Bluetooth SCO no longer managed here — system handles routing
     }
 
     suspend fun waitForPlaybackCompletion() {

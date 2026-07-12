@@ -12,8 +12,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 enum class CameraSource { PHONE, GLASSES }
-enum class MicSource { BUILTIN, BLUETOOTH_SCO, USB, GLASSES }
-enum class SpeakerOutput { BUILTIN_SPEAKER, EARPIECE, BLUETOOTH_A2DP, USB, GLASSES }
+enum class MicSource { BUILTIN, BLUETOOTH_SCO }
+enum class SpeakerOutput { BUILTIN_SPEAKER, EARPIECE }
 
 /**
  * Media playback history item for tracking YouTube/music playback

@@ -621,7 +621,9 @@ fun SettingsContent(
     // Helper to apply audio device change — must rebuild OpusStreamPlayer (captures
     // AudioDeviceInfo in init {} and cannot be re-routed after creation).
     val applyAudioDeviceChange: () -> Unit = {
+        Log.i("SettingsContent", "🎛️ applyAudioDeviceChange → calling chatViewModel.restartAudioForDeviceChange()")
         chatViewModel?.restartAudioForDeviceChange()
+            ?: Log.w("SettingsContent", "⚠️ chatViewModel is NULL — cannot restart audio")
     }
     // Use parameter isGlassesConnected instead of local state
     var glassesBatteryLevel by remember { mutableIntStateOf(settingsRepository.glassesBatteryLevel) }
@@ -724,22 +726,19 @@ fun SettingsContent(
         // Mic Source Section
         NeonSettingsSection(title = stringResource(R.string.mic_source)) {
             val context = androidx.compose.ui.platform.LocalContext.current
-            val availableMicSources = remember(isGlassesConnected) {
-                AudioDeviceSelector.getAvailableMicSources(context, isGlassesConnected)
-            }
+            val availableMicSources = AudioDeviceSelector.getAvailableMicSources(context, isGlassesConnected)
             // Ensure current selection is in available list; if not, force a valid one
             val effectiveMicSource = if (availableMicSources.contains(micSource)) micSource else (availableMicSources.firstOrNull() ?: MicSource.BUILTIN)
 
-            // Pre-resolve labels for all mic sources to avoid @Composable invocations in non-composable lambda
+            // Pre-resolve labels
             val labelBuiltin = stringResource(R.string.mic_builtin)
             val labelBtSco = stringResource(R.string.mic_bluetooth_sco)
-            val labelUsb = stringResource(R.string.mic_usb)
-            val labelGlasses = stringResource(R.string.mic_glasses)
 
             DeviceDropdownSection(
                 options = availableMicSources,
                 selectedValue = effectiveMicSource,
                 onValueChange = { newSource ->
+                    Log.i("SettingsContent", "🎤 Mic dropdown onValueChange: $micSource → $newSource")
                     if (availableMicSources.contains(newSource)) {
                         micSource = newSource
                         settingsRepository.micSource = newSource
@@ -750,12 +749,10 @@ fun SettingsContent(
                     when (source) {
                         MicSource.BUILTIN -> labelBuiltin
                         MicSource.BLUETOOTH_SCO -> labelBtSco
-                        MicSource.USB -> labelUsb
-                        MicSource.GLASSES -> labelGlasses
                     }
                 },
-                isEnabledProvider = { source ->
-                    source != MicSource.GLASSES || isGlassesConnected
+                isEnabledProvider = { _ ->
+                    true  // Both BUILTIN and BLUETOOTH_SCO always available
                 }
             )
         }
@@ -765,22 +762,18 @@ fun SettingsContent(
         // Speaker Output Section
         NeonSettingsSection(title = stringResource(R.string.speaker_output)) {
             val context = androidx.compose.ui.platform.LocalContext.current
-            val availableSpeakers = remember(isGlassesConnected) {
-                AudioDeviceSelector.getAvailableSpeakerOutputs(context, isGlassesConnected)
-            }
+            val availableSpeakers = AudioDeviceSelector.getAvailableSpeakerOutputs(context, isGlassesConnected)
             val effectiveSpeaker = if (availableSpeakers.contains(speakerOutput)) speakerOutput else (availableSpeakers.firstOrNull() ?: SpeakerOutput.BUILTIN_SPEAKER)
 
-            // Pre-resolve labels for all speaker outputs
+            // Pre-resolve labels
             val labelBuiltInSpeaker = stringResource(R.string.speaker_builtin)
             val labelEarpiece = stringResource(R.string.speaker_earpiece)
-            val labelBtA2dp = stringResource(R.string.speaker_bluetooth_a2dp)
-            val labelSpeakerUsb = stringResource(R.string.speaker_usb)
-            val labelSpeakerGlasses = stringResource(R.string.speaker_glasses)
 
             DeviceDropdownSection(
                 options = availableSpeakers,
                 selectedValue = effectiveSpeaker,
                 onValueChange = { newOutput ->
+                    Log.i("SettingsContent", "🔀 Speaker dropdown onValueChange: $speakerOutput → $newOutput")
                     if (availableSpeakers.contains(newOutput)) {
                         speakerOutput = newOutput
                         settingsRepository.speakerOutput = newOutput
@@ -791,13 +784,10 @@ fun SettingsContent(
                     when (output) {
                         SpeakerOutput.BUILTIN_SPEAKER -> labelBuiltInSpeaker
                         SpeakerOutput.EARPIECE -> labelEarpiece
-                        SpeakerOutput.BLUETOOTH_A2DP -> labelBtA2dp
-                        SpeakerOutput.USB -> labelSpeakerUsb
-                        SpeakerOutput.GLASSES -> labelSpeakerGlasses
                     }
                 },
-                isEnabledProvider = { output ->
-                    output != SpeakerOutput.GLASSES || isGlassesConnected
+                isEnabledProvider = { _ ->
+                    true  // Both BUILTIN_SPEAKER and EARPIECE always available
                 }
             )
         }
