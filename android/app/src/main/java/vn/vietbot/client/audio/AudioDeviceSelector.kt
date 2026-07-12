@@ -78,28 +78,27 @@ object AudioDeviceSelector {
      * Find AudioDeviceInfo for a specific MicSource.
      *
      * Simplified:
-     * - BUILTIN → null (let OS pick — BT SCO mic if BT headset connected,
-     *   glasses mic if glasses connected, phone mic otherwise)
-     * - BLUETOOTH_SCO → pin to TYPE_BLUETOOTH_SCO or TYPE_WIRED_HEADSET
-     *   (3.5mm TRRS with mic pin).
+     * - BUILTIN → TYPE_BUILTIN_MIC explicitly (always exists on phone, ensures audio is captured
+     *   even if BT SCO was previously started and routed to wrong input).
+     * - BLUETOOTH_SCO → pin to TYPE_BLUETOOTH_SCO or TYPE_WIRED_HEADSET.
      *
-     * Per user testing: selecting BUILTIN routes to whatever mic is currently
-     * active (BT SCO when headset is connected, glasses mic when glasses
-     * connected, else phone mic). BLUETOOTH_SCO is an explicit override.
+     * Per user testing: mic path needs EXPLICIT device pin for both selections to work.
+     * Letting OS auto-route causes silent failures (phone mic captures nothing when BT SCO
+     * is already started, or vice versa).
      */
     fun findInputDevice(context: Context, source: MicSource): AudioDeviceInfo? {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         return when (source) {
-            MicSource.BUILTIN -> null  // OS default — whatever mic is connected
+            MicSource.BUILTIN ->
+                am.getDevices(AudioManager.GET_DEVICES_INPUTS)
+                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_MIC }
             MicSource.BLUETOOTH_SCO -> {
-                // Try explicit BT SCO input first, fall back to wired headset
                 val device = am.getDevices(AudioManager.GET_DEVICES_INPUTS)
                     .firstOrNull {
                         it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
                         it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET
                     }
                 if (device != null) return device
-                // BT SCO not enumerated yet → start SCO so input becomes available
                 if (am.isBluetoothScoAvailableOffCall && !am.isBluetoothScoOn) {
                     am.startBluetoothSco()
                     Log.i("AudioDeviceSelector", "Started Bluetooth SCO to enumerate headset mic")

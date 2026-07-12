@@ -66,8 +66,8 @@
 
     <!-- Device Selection -->
     <string name="mic_source">Nguồn Mic</string>
-    <string name="mic_builtin">Mic tích hợp</string>
-    <string name="mic_bluetooth_sco">Bluetooth (SCO/Headset)</string>
+    <string name="mic_builtin">Mic điện thoại</string>
+    <string name="mic_bluetooth_sco">Mic Bluetooth</string>
 
     <string name="speaker_output">Đầu ra Loa</string>
     <string name="speaker_builtin">Loa Bluetooth</string>

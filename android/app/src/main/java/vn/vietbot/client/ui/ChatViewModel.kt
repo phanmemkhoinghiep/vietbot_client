@@ -120,10 +120,10 @@ class ChatViewMode @Inject constructor(
     }
 
     /**
-     * Rebuild OpusStreamPlayer to apply new speaker/mic selection.
-     * OpusStreamPlayer captures AudioDeviceInfo in `init {}` and cannot be
-     * re-routed after creation — must recreate. Called from Settings
-     * when speakerOutput/micSource changes.
+     * Rebuild OpusStreamPlayer + AudioRecorder to apply new speaker/mic selection.
+     * Both capture AudioDeviceInfo in `init {}` and cannot be re-routed
+     * after creation — must recreate. Called from Settings when
+     * speakerOutput/micSource changes.
      */
     fun restartAudioForDeviceChange() {
         val proto = protocol ?: return
@@ -134,23 +134,41 @@ class ChatViewMode @Inject constructor(
         }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                Log.i(TAG, "Stopping current player for device change")
+                Log.i(TAG, "Stopping current player+recorder for device change")
                 player?.stop()
                 player?.release()
                 player = null
-                // Brief delay so AudioTrack releases its preferred device hint
-                delay(150)
+                recorder?.stopRecording()
+                recorder = null
+                encoder = null
+                deviceState = DeviceState.IDLE
+                delay(200)
 
-                val sampleRate = 24000
-                val channels = 1
-                val frameSizeMs = 60
+                val sampleRateOut = 24000
+                val channelsOut = 1
+                val frameSizeMsOut = 60
                 Log.i(TAG, "Rebuilding OpusStreamPlayer with new speakerOutput=${settings.speakerOutput}")
-                val newPlayer = OpusStreamPlayer(sampleRate, channels, frameSizeMs, settings, context)
+                val newPlayer = OpusStreamPlayer(sampleRateOut, channelsOut, frameSizeMsOut, settings, context)
                 newPlayer.start(proto.incomingAudioFlow)
                 player = newPlayer
-                Log.i(TAG, "✅ Player restarted for new speaker device")
+
+                // Rebuild recorder with new micSource
+                val sampleRateIn = 16000
+                val channelsIn = 1
+                val frameSizeMsIn = 60
+                encoder = OpusEncoder(sampleRateIn, channelsIn, frameSizeMsIn)
+                recorder = AudioRecorder(sampleRateIn, channelsIn, frameSizeMsIn, settings, context)
+                Log.i(TAG, "Rebuilding AudioRecorder with new micSource=${settings.micSource}")
+                val audioFlow = recorder?.startRecording()
+                launch {
+                    deviceState = DeviceState.LISTENING
+                    audioFlow?.map { encoder?.encode(it) }?.collect {
+                        it?.let { proto.sendAudio(it) }
+                    }
+                }
+                Log.i(TAG, "✅ Player + Recorder restarted for new audio devices")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to restart player: ${e.message}", e)
+                Log.e(TAG, "Failed to restart audio: ${e.message}", e)
             }
         }
     }
