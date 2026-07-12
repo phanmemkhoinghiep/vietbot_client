@@ -1390,7 +1390,10 @@ fun <T> DeviceDropdownSection(
     var expanded by remember { mutableStateOf(false) }
     val selectedLabel = labelProvider(selectedValue)
 
-    Box(modifier = Modifier.fillMaxWidth()) {
+    Box(modifier = Modifier
+        .fillMaxWidth()
+        .clickable(onClick = { expanded = true })  // ✅ Click to open dropdown
+    ) {
         Text(
             text = selectedLabel,
             style = MaterialTheme.typography.bodyMedium,

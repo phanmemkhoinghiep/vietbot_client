@@ -91,9 +91,12 @@ class OpusStreamPlayer(
             Log.i(TAG, "Using default output device (preferredDevice=null or SDK<23)")
         }
 
-        // Bluetooth SCO handling for headset profile
-        // Start SCO for both A2DP (combo headset) and GLASSES
-        if (selectedOutput == SpeakerOutput.BLUETOOTH_A2DP || selectedOutput == SpeakerOutput.GLASSES) {
+        // Bluetooth SCO handling for headset profile (HFP mono)
+        // Start SCO ONLY for actual Bluetooth devices, NOT wired headsets.
+        // Wired headsets (TYPE_WIRED_HEADSET) don't use SCO.
+        if ((selectedOutput == SpeakerOutput.BLUETOOTH_A2DP || selectedOutput == SpeakerOutput.GLASSES)
+            && preferredDevice != null
+            && preferredDevice.type != AudioDeviceInfo.TYPE_WIRED_HEADSET) {
             val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             audioManager = am
             // For Bluetooth SCO (headset/handsfree profile), need explicit start
@@ -101,7 +104,7 @@ class OpusStreamPlayer(
                 bluetoothScoStarted = true
                 am.isBluetoothScoOn = true
                 am.startBluetoothSco()
-                Log.i(TAG, "Bluetooth SCO started for output: $selectedOutput")
+                Log.i(TAG, "Bluetooth SCO started for output: $selectedOutput, device: ${preferredDevice.productName}")
             }
         }
     }
