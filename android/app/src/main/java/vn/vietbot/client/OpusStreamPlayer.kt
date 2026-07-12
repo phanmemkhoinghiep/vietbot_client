@@ -62,11 +62,12 @@ class OpusStreamPlayer(
             SpeakerOutput.GLASSES,
             SpeakerOutput.USB -> {
                 // External output: route via MEDIA so setPreferredDevice(BT_A2DP) works.
-                Log.i(TAG, "Using USAGE_MEDIA for external speaker output (BT/USB/Glasses)")
+                Log.i(TAG, "📣 Using USAGE_MEDIA for external speaker output (BT/USB/Glasses)")
                 AudioAttributes.USAGE_MEDIA to AudioAttributes.CONTENT_TYPE_SPEECH
             }
             else -> {
                 // Built-in speaker / earpiece: VOICE_COMMUNICATION for AEC compatibility.
+                Log.i(TAG, "🔊 Using USAGE_VOICE_COMMUNICATION for built-in speaker/earpiece")
                 AudioAttributes.USAGE_VOICE_COMMUNICATION to AudioAttributes.CONTENT_TYPE_SPEECH
             }
         }
@@ -97,10 +98,25 @@ class OpusStreamPlayer(
         // We apply this AFTER building AudioTrack to avoid Kotlin not finding
         // AudioTrack.Builder.setPreferredDevice() at API 26 on some SDK stubs.
         if (preferredDevice != null && android.os.Build.VERSION.SDK_INT >= 23) {
-            audioTrack.setPreferredDevice(preferredDevice)
-            Log.i(TAG, "Using preferred output device: ${preferredDevice.productName} (type=${preferredDevice.type})")
+            val setResult = audioTrack.setPreferredDevice(preferredDevice)
+            Log.i(
+                TAG,
+                "🎯 setPreferredDevice(${preferredDevice.productName}, type=${preferredDevice.type}) " +
+                    "→ success=$setResult, speakerOutput=$selectedOutput"
+            )
+            // Also check actual routing after play()
+            val actualRoutedDevice = audioTrack.getRoutedDevice()
+            Log.i(
+                TAG,
+                "📊 AudioTrack.getRoutedDevice() = " +
+                    (actualRoutedDevice?.productName?.let { "$it (type=${actualRoutedDevice.type})" } ?: "null")
+            )
         } else {
-            Log.i(TAG, "Using default output device (preferredDevice=null or SDK<23)")
+            Log.w(
+                TAG,
+                "⚠️ NO preferredDevice (selectedOutput=$selectedOutput, " +
+                    "availableDevices=${AudioDeviceSelector.getAvailableSpeakerOutputs(context, false).joinToString { it.name }})"
+            )
         }
 
         // Bluetooth SCO handling for headset profile (HFP mono)

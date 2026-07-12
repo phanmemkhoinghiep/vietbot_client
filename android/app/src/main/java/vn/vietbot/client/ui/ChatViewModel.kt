@@ -127,6 +127,7 @@ class ChatViewMode @Inject constructor(
      */
     fun restartAudioForDeviceChange() {
         val proto = protocol ?: return
+        Log.i(TAG, "🔄 restartAudioForDeviceChange called (audioChannelOpen=${proto.isAudioChannelOpened()})")
         if (!proto.isAudioChannelOpened()) {
             Log.i(TAG, "Audio channel not open — skipping player restart")
             return
@@ -147,7 +148,7 @@ class ChatViewMode @Inject constructor(
                 val newPlayer = OpusStreamPlayer(sampleRate, channels, frameSizeMs, settings, context)
                 newPlayer.start(proto.incomingAudioFlow)
                 player = newPlayer
-                Log.i(TAG, "Player restarted for new speaker device")
+                Log.i(TAG, "✅ Player restarted for new speaker device")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to restart player: ${e.message}", e)
             }
