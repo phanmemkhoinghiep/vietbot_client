@@ -53,14 +53,26 @@ class OpusStreamPlayer(
             AudioFormat.ENCODING_PCM_16BIT
         ) * 4 // Increase buffer size 4x for streaming headroom (was 2x - caused underflow)
 
-        // Build AudioAttributes for voice communication (better AEC on Samsung)
+        // Build AudioAttributes based on selected output.
+        // VOICE_COMMUNICATION routes audio through earpiece/receiver (NOT A2DP).
+        // When user selects BT A2DP or wired headset, use MEDIA usage so the
+        // audio actually plays through the chosen external device.
+        val (usage, contentType) = when (settingsRepository.speakerOutput) {
+            SpeakerOutput.BLUETOOTH_A2DP,
+            SpeakerOutput.GLASSES,
+            SpeakerOutput.USB -> {
+                // External output: route via MEDIA so setPreferredDevice(BT_A2DP) works.
+                Log.i(TAG, "Using USAGE_MEDIA for external speaker output (BT/USB/Glasses)")
+                AudioAttributes.USAGE_MEDIA to AudioAttributes.CONTENT_TYPE_SPEECH
+            }
+            else -> {
+                // Built-in speaker / earpiece: VOICE_COMMUNICATION for AEC compatibility.
+                AudioAttributes.USAGE_VOICE_COMMUNICATION to AudioAttributes.CONTENT_TYPE_SPEECH
+            }
+        }
         val audioAttributes = AudioAttributes.Builder()
-            // Use VOICE_COMMUNICATION for better AEC on Samsung devices.
-            // This routes audio through the communication path where
-            // AcousticEchoCanceler is more effective. On Xiaomi 14T,
-            // hardware AEC is strong enough even with MEDIA usage.
-            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .setUsage(usage)
+            .setContentType(contentType)
             .build()
 
         val audioFormat = AudioFormat.Builder()
