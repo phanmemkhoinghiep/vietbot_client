@@ -93,6 +93,7 @@ class MainActivity : ComponentActivity(), LifecycleOwner {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     MainScreen(
                         settingsRepository = settingsRepository,
+                        chatViewModel = chatViewModel,
                         modifier = Modifier.padding(innerPadding)
                     )
                 }

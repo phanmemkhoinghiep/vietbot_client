@@ -118,6 +118,7 @@ sealed class BottomNavItem(
 @Composable
 fun MainScreen(
     settingsRepository: SettingsRepository,
+    chatViewModel: ChatViewMode? = null,
     modifier: Modifier = Modifier,
     onNavigateToForm: () -> Unit = {},
     onNavigateToChat: () -> Unit = {}
@@ -144,6 +145,7 @@ fun MainScreen(
     } else {
         MainScreenContent(
             settingsRepository = settingsRepository,
+            chatViewModel = chatViewModel,
             navItems = navItems,
             selectedIndex = selectedIndex,
             onSelectedIndexChange = { selectedIndex = it },
@@ -157,6 +159,7 @@ fun MainScreen(
 @Composable
 private fun MainScreenContent(
     settingsRepository: SettingsRepository,
+    chatViewModel: ChatViewMode?,
     navItems: List<BottomNavItem>,
     selectedIndex: Int,
     onSelectedIndexChange: (Int) -> Unit,
@@ -207,6 +210,7 @@ private fun MainScreenContent(
                 3 -> SettingsContent(
                     modifier = Modifier.padding(innerPadding),
                     settingsRepository = settingsRepository,
+                    chatViewModel = chatViewModel,
                     isGlassesConnected = isGlassesConnected || hasGlassesSelected,
                     glassesDeviceName = settingsRepository.glassesName,
                     onNavigateToGlasses = onNavigateToGlasses,
@@ -575,6 +579,7 @@ private fun formatAge(deltaMillis: Long): String = TimeUtils.formatAge(deltaMill
 fun SettingsContent(
     modifier: Modifier = Modifier,
     settingsRepository: SettingsRepository,
+    chatViewModel: ChatViewMode? = null,
     isGlassesConnected: Boolean = false,
     glassesDeviceName: String? = null,
     onNavigateToGlasses: () -> Unit = {},
@@ -612,6 +617,12 @@ fun SettingsContent(
     var appLanguage by remember { mutableStateOf(settingsRepository.appLanguage) }
     var micSource by remember { mutableStateOf(settingsRepository.micSource) }
     var speakerOutput by remember { mutableStateOf(settingsRepository.speakerOutput) }
+
+    // Helper to apply audio device change — must rebuild OpusStreamPlayer (captures
+    // AudioDeviceInfo in init {} and cannot be re-routed after creation).
+    val applyAudioDeviceChange: () -> Unit = {
+        chatViewModel?.restartAudioForDeviceChange()
+    }
     // Use parameter isGlassesConnected instead of local state
     var glassesBatteryLevel by remember { mutableIntStateOf(settingsRepository.glassesBatteryLevel) }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -732,6 +743,7 @@ fun SettingsContent(
                     if (availableMicSources.contains(newSource)) {
                         micSource = newSource
                         settingsRepository.micSource = newSource
+                        applyAudioDeviceChange()
                     }
                 },
                 labelProvider = { source ->
@@ -772,6 +784,7 @@ fun SettingsContent(
                     if (availableSpeakers.contains(newOutput)) {
                         speakerOutput = newOutput
                         settingsRepository.speakerOutput = newOutput
+                        applyAudioDeviceChange()
                     }
                 },
                 labelProvider = { output ->

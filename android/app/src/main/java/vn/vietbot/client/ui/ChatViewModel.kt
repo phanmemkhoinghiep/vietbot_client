@@ -119,6 +119,41 @@ class ChatViewMode @Inject constructor(
         }
     }
 
+    /**
+     * Rebuild OpusStreamPlayer to apply new speaker/mic selection.
+     * OpusStreamPlayer captures AudioDeviceInfo in `init {}` and cannot be
+     * re-routed after creation — must recreate. Called from Settings
+     * when speakerOutput/micSource changes.
+     */
+    fun restartAudioForDeviceChange() {
+        val proto = protocol ?: return
+        if (!proto.isAudioChannelOpened()) {
+            Log.i(TAG, "Audio channel not open — skipping player restart")
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                Log.i(TAG, "Stopping current player for device change")
+                player?.stop()
+                player?.release()
+                player = null
+                // Brief delay so AudioTrack releases its preferred device hint
+                delay(150)
+
+                val sampleRate = 24000
+                val channels = 1
+                val frameSizeMs = 60
+                Log.i(TAG, "Rebuilding OpusStreamPlayer with new speakerOutput=${settings.speakerOutput}")
+                val newPlayer = OpusStreamPlayer(sampleRate, channels, frameSizeMs, settings, context)
+                newPlayer.start(proto.incomingAudioFlow)
+                player = newPlayer
+                Log.i(TAG, "Player restarted for new speaker device")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to restart player: ${e.message}", e)
+            }
+        }
+    }
+
     var encoder: OpusEncoder? = null
     var recorder: AudioRecorder? = null
     var player: OpusStreamPlayer? = null
