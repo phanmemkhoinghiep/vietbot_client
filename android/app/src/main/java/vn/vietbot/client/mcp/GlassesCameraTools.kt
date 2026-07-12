@@ -11,7 +11,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit
@@ -33,7 +33,7 @@ class GlassesCameraTools(
 
     private val glassesScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // HTTP client for vision API
+    // HTTP client for vision API - use system trust store
     private val httpClient = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
@@ -41,7 +41,7 @@ class GlassesCameraTools(
         .build()
 
     // Vision server configuration
-    var visionServerUrl: String = "https://esp32.vietbot.vn/vision/explain"
+    var visionServerUrl: String = "https://vietbot.vn/vision/explain"
     var deviceId: String = ""
     var clientId: String = ""
 
@@ -404,7 +404,7 @@ BAT BUOC GOI KHI:
 
             val request = Request.Builder()
                 .url(visionServerUrl)
-                .post(RequestBody.create(contentType.toMediaTypeOrNull(), bodyBytes))
+                .post(bodyBytes.toRequestBody(contentType.toMediaTypeOrNull()))
                 .header("Device-Id", deviceId)
                 .header("Client-Id", clientId)
                 .build()

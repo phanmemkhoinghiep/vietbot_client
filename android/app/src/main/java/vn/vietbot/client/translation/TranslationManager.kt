@@ -1,6 +1,7 @@
 package vn.vietbot.client.translation
 
 import android.content.Context
+import android.media.AudioManager
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
@@ -25,8 +26,8 @@ class TranslationManager(private val context: Context) {
         private const val TAG = "TranslationManager"
 
         // Pattern to parse translation messages
-        // Format: [TRANSLATION][xx-XX]<translated_text>
-        val TRANSLATION_PATTERN = Regex("^\\[TRANSLATION\\]\\[(\\w{2}-\\w{2})\\](.+)$")
+        // Format: [TRANSLATION]<translated_text> (no language code in prefix)
+        val TRANSLATION_PATTERN = Regex("^\\[TRANSLATION\\](.+)$")
     }
 
     // Translation segment data class
@@ -73,6 +74,19 @@ class TranslationManager(private val context: Context) {
                 isTtsInitialized = true
                 Log.i(TAG, "TTS initialized successfully")
 
+                // Configure TTS to use VOICE_COMMUNICATION stream for better AEC
+                // This helps prevent TTS audio from leaking back into mic on Samsung devices
+                try {
+                    val params = android.os.Bundle().apply {
+                        putInt(android.speech.tts.TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_VOICE_CALL)
+                    }
+                    tts?.setEngineByPackageName("com.google.android.tts") // Optional: prefer Google TTS
+                    tts?.setSpeechRate(1.0f)
+                    tts?.setPitch(1.0f)
+                } catch (e: Exception) {
+                    Log.w(TAG, "TTS config failed: ${e.message}")
+                }
+
                 // Set up utterance progress listener
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
@@ -107,8 +121,9 @@ class TranslationManager(private val context: Context) {
     fun parseTranslationMessage(text: String): TranslationSegment? {
         val match = TRANSLATION_PATTERN.find(text) ?: return null
 
-        val langCode = match.groupValues[1]  // e.g., "vi-VN"
-        val translatedText = match.groupValues[2].trim()  // e.g., "Xin chào bạn khỏe không?"
+        val translatedText = match.groupValues[1].trim()  // e.g., "Xin chào bạn khỏe không?"
+        // No lang code in prefix anymore — use default Vietnamese for translation mode
+        val langCode = "vi-VN"
 
         return TranslationSegment(
             langCode = langCode,
@@ -192,14 +207,16 @@ class TranslationManager(private val context: Context) {
             // so all future segments use the SAME voice. This is the fix
             // for the "different voice every segment" issue.
             try {
-                pinnedVoice = tts?.voice
-                    ?: run {
-                        val voices = tts?.voices?.filter {
-                            it.locale.language == locale.language ||
-                            it.locale.toLanguageTag().startsWith(locale.language)
-                        }
-                        voices?.firstOrNull { !it.isNetworkConnectionRequired } ?: voices?.firstOrNull()
-                    }
+                // Wait for TTS to load voices for the new language, then select one
+                val voices = tts?.voices ?: return
+                val matchingVoices = voices.filter {
+                    it.locale.language == locale.language ||
+                    it.locale.toLanguageTag().startsWith(locale.language)
+                }
+                pinnedVoice = matchingVoices.firstOrNull { !it.isNetworkConnectionRequired }
+                    ?: matchingVoices.firstOrNull()
+                    ?: voices.firstOrNull { !it.isNetworkConnectionRequired }
+                    ?: voices.firstOrNull()
                 pinnedVoice?.let { tts?.voice = it }
                 Log.i(TAG, "Pinned TTS voice: ${pinnedVoice?.name} (lang=${pinnedVoice?.locale})")
             } catch (e: Exception) {
@@ -208,7 +225,11 @@ class TranslationManager(private val context: Context) {
         }
 
         // Speak with utterance ID = segment ID
-        tts?.speak(segment.text, TextToSpeech.QUEUE_FLUSH, null, segment.id)
+        // Use VOICE_CALL stream for better AEC on Samsung devices
+        val params = android.os.Bundle().apply {
+            putInt(android.speech.tts.TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_VOICE_CALL)
+        }
+        tts?.speak(segment.text, TextToSpeech.QUEUE_FLUSH, params, segment.id)
         Log.i(TAG, "Speaking: ${segment.text}")
     }
 

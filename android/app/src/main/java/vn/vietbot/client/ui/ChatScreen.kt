@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.size
@@ -36,6 +37,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.lazy.LazyColumn
 import coil3.compose.AsyncImage
@@ -44,6 +47,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,6 +64,7 @@ import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -93,7 +98,12 @@ fun ChatScreen(
     val deviceState by viewModel.deviceStateFlow.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
     val isConnecting by viewModel.isConnecting.collectAsState()
+    val isTranslationMode by viewModel.isTranslationMode.collectAsState()
+    // Active translation card (server sends [TRANSLATION][xx-XX]<text> via TTS sentence_start).
+    // Observed here so the rendered card re-composes when new segments arrive or are spoken.
+    val currentTranslation by viewModel.display.currentTranslation.collectAsState()
     var textInput by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
 
     // Get settings values
     val fontFamily = settingsRepository?.fontFamily ?: "System"
@@ -259,11 +269,26 @@ fun ChatScreen(
         LazyColumn(
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth(),
+                .fillMaxWidth()
+                // Inset from system bars (side nav bars on tablets in landscape)
+                // so content aligns with input row which also uses systemBars insets
+                .windowInsetsPadding(WindowInsets.systemBars),
             reverseLayout = true,
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            // Active translation card (translation mode displays segments as they arrive)
+            currentTranslation?.let { translation ->
+                item {
+                    TranslationDisplayCard(
+                        translation = translation,
+                        textColor = textColor,
+                        bubbleColor = bubbleColor,
+                        fontSize = fontSize,
+                        fontFamily = fontFamily
+                    )
+                }
+            }
             items(messages.reversed()) { message ->
                 ChatMessageItem(
                     message = message,
@@ -276,17 +301,37 @@ fun ChatScreen(
         }
 
         // Text input area (context/hasInternet already declared above for the connection button)
-        val canSendText = isConnected && hasInternet
+        val canSendText = isConnected && hasInternet && !isTranslationMode
+
+        // Hide any focused keyboard and clear focus when entering translation
+        // mode — otherwise a stale keyboard may remain on screen from a prior
+        // text-mode session.
+        val hideFocusManager = LocalFocusManager.current
+        val hideKeyboardController = LocalSoftwareKeyboardController.current
+
+        // Always prevent auto-focus on screen load — keyboard should only show
+        // when the user explicitly taps the text field. This applies in both
+        // translation mode (block input) and normal chat (avoid surprise IME).
+        LaunchedEffect(Unit) {
+            hideFocusManager.clearFocus()
+            hideKeyboardController?.hide()
+        }
+
+        if (isTranslationMode) {
+            LaunchedEffect(isTranslationMode) {
+                hideKeyboardController?.hide()
+                hideFocusManager.clearFocus()
+                textInput = ""
+            }
+        }
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                // Take the union of navigation-bar and IME insets so the input
-                // sits flush above the keyboard (IME > nav bar when shown) and
-                // above the nav bar when the keyboard is hidden. Avoids the gap
-                // caused by stacking navigationBarsPadding + imePadding.
+                // Use systemBars to handle both bottom and side navigation bars on tablets in landscape
+                // union with IME for keyboard. This ensures input sits above nav bars on all orientations.
                 .windowInsetsPadding(
-                    WindowInsets.navigationBars.union(WindowInsets.ime)
+                    WindowInsets.systemBars.union(WindowInsets.ime)
                 )
                 .padding(horizontal = 12.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -304,27 +349,65 @@ fun ChatScreen(
                 keyboardController?.hide()
                 focusManager.clearFocus()
             }
-            OutlinedTextField(
-                value = textInput,
-                onValueChange = { if (canSendText) textInput = it },
-                modifier = Modifier.weight(1f),
-                enabled = canSendText,
-                placeholder = { Text(stringResource(if (canSendText) R.string.text_input_placeholder else R.string.connect_to_chat)) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(
-                    onSend = { submitAndHideKeyboard() }
-                ),
-                singleLine = true
-            )
-            IconButton(
-                onClick = { submitAndHideKeyboard() },
-                enabled = canSendText && textInput.isNotBlank()
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = stringResource(R.string.send),
-                    tint = if (canSendText) MaterialTheme.colorScheme.primary else Color.Gray
+            if (isTranslationMode) {
+                // 🔥 TRANSLATION MODE: Block text input completely.
+                // Show a static "Chế độ dịch" placeholder that consumes the row
+                // layout space so the rest of the chat screen keeps its current
+                // proportions. The overlay absorbs taps so the keyboard never
+                // appears and no text can be entered.
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(56.dp) // Match OutlinedTextField default height
+                        .background(
+                            color = Color(0xFFEEEEEE),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                        .clickable(enabled = false) {},
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Text(
+                        text = "🌐  Chế độ dịch — không hỗ trợ nhập text",
+                        style = TextStyle(fontSize = 13.sp, color = Color(0xFF757575)),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+                }
+                // Send icon disabled (translation mode blocks text input)
+                IconButton(
+                    onClick = {},
+                    enabled = false
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = stringResource(R.string.send),
+                        tint = Color(0xFFBDBDBD)
+                    )
+                }
+            } else {
+                OutlinedTextField(
+                    value = textInput,
+                    onValueChange = { if (canSendText) textInput = it },
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(focusRequester),
+                    enabled = canSendText,
+                    placeholder = { Text(stringResource(if (canSendText) R.string.text_input_placeholder else R.string.connect_to_chat)) },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(
+                        onSend = { submitAndHideKeyboard() }
+                    ),
+                    singleLine = true
                 )
+                IconButton(
+                    onClick = { submitAndHideKeyboard() },
+                    enabled = canSendText && textInput.isNotBlank()
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = stringResource(R.string.send),
+                        tint = if (canSendText) MaterialTheme.colorScheme.primary else Color.Gray
+                    )
+                }
             }
         }
     }
@@ -421,27 +504,31 @@ fun ChatMessageItem(
                         }
                         if (cursorSuffix.isNotEmpty()) append(cursorSuffix)
                     }
-                    Text(
-                        text = annotated,
-                        style = TextStyle(
-                            fontFamily = getFontFamily(fontFamily),
-                            fontSize = fontSize.sp
-                        ),
-                        modifier = Modifier.padding(top = 0.dp)
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = annotated,
+                            style = TextStyle(
+                                fontFamily = getFontFamily(fontFamily),
+                                fontSize = fontSize.sp
+                            ),
+                            modifier = Modifier.padding(top = 0.dp)
+                        )
+                    }
                 } else {
                     val finalText = displayMessage.ifBlank { "" } + cursorSuffix
-                    Text(
-                        text = finalText,
-                        style = TextStyle(
-                            fontFamily = getFontFamily(fontFamily),
-                            fontSize = fontSize.sp,
-                            color = playedColor
-                        ),
-                        // softWrap defaults to true; text wraps to next line automatically
-                        // when it approaches the bubble's right edge (widthIn max 280.dp).
-                        modifier = Modifier.padding(top = if (displayMessage.isNotBlank()) 0.dp else 0.dp)
-                    )
+                    SelectionContainer {
+                        Text(
+                            text = finalText,
+                            style = TextStyle(
+                                fontFamily = getFontFamily(fontFamily),
+                                fontSize = fontSize.sp,
+                                color = playedColor
+                            ),
+                            // softWrap defaults to true; text wraps to next line automatically
+                            // when it approaches the bubble's right edge (widthIn max 280.dp).
+                            modifier = Modifier.padding(top = if (displayMessage.isNotBlank()) 0.dp else 0.dp)
+                        )
+                    }
                 }
                 // Display image if present (correct aspect ratio, no path text)
                 message.imageUri?.let { uriString ->
@@ -471,6 +558,31 @@ fun ChatMessageItem(
                             .fillMaxWidth()
                             .padding(top = 8.dp)
                     )
+                }
+                // Display clickable URL button (e.g., bind manager link)
+                message.clickableUrl?.let { url ->
+                    val ctx = LocalContext.current
+                    Button(
+                        onClick = {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(url))
+                            ctx.startActivity(intent)
+                        },
+                        modifier = Modifier
+                            .padding(top = 8.dp)
+                            .fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Link,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Mở trang quản lý",
+                            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        )
+                    }
                 }
                 if (showTimestamp && canToggleTimestamp) {
                     Text(
@@ -569,7 +681,8 @@ fun TranslationDisplayCard(
                 style = TextStyle(
                     fontFamily = getFontFamily(fontFamily),
                     fontSize = fontSize.sp
-                )
+                ),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Justify
             )
         }
     }

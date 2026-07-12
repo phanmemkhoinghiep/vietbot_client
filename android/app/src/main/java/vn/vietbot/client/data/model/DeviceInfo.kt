@@ -240,9 +240,14 @@ object DummyDataGenerator {
     }
 
     private fun generateStableMac(context: android.content.Context): String {
-        // Generate deterministic MAC based on device serial to avoid random MAC on each restart
-        val serial = android.os.Build.SERIAL ?: android.os.Build.getSerial() ?: "unknown"
-        val hash = serial.hashCode()
+        // Generate deterministic MAC based on device model + build fingerprint to avoid collision
+        // Android 10+ returns "unknown" for SERIAL without READ_PHONE_STATE permission
+        // Must use build fingerprint (unique per device) + model to generate stable MAC
+        val model = android.os.Build.MODEL ?: "unknown"
+        val fingerprint = android.os.Build.FINGERPRINT ?: "unknown"
+        val combined = "$model|$fingerprint"
+        val hash = combined.hashCode()
+        android.util.Log.d("DeviceInfo", "Generating stable MAC from model+fingerprint (len=${combined.length})")
         val mac = String.format("%02x:%02x:%02x:%02x:%02x:%02x",
             (hash shr 40 and 0xFF).toInt() or 0x02,  // Set locally administered bit
             (hash shr 32 and 0xFF).toInt(),

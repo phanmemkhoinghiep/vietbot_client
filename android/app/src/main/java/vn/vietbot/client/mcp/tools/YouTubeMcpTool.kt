@@ -10,6 +10,7 @@ import android.view.KeyEvent
 import vn.vietbot.client.data.MediaHistoryItem
 import vn.vietbot.client.data.SettingsRepository
 import vn.vietbot.client.mcp.ContentItem
+import vn.vietbot.client.util.TimeUtils
 import vn.vietbot.client.mcp.McpCallToolResult
 import vn.vietbot.client.mcp.McpProperty
 import vn.vietbot.client.mcp.McpServer
@@ -185,12 +186,5 @@ Ví dụ: 'Dừng phát', 'Tạm dừng YouTube', 'Ngắt nhạc', 'Tắt nhạc
         }
     }
 
-    private fun formatAge(seconds: Long): String {
-        return when {
-            seconds < 60 -> "vừa xong"
-            seconds < 3600 -> "${seconds / 60} phút trước"
-            seconds < 86400 -> "${seconds / 3600} giờ trước"
-            else -> "${seconds / 86400} ngày trước"
-        }
-    }
+    private fun formatAge(seconds: Long): String = TimeUtils.formatAge(seconds * 1000)
 }

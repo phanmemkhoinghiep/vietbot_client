@@ -22,23 +22,12 @@ class WebsocketProtocol(private val deviceInfo: DeviceInfo,
     private var isOpen: Boolean = false
     private var websocket: WebSocket? = null
 
-    private val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-        override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>?, authType: String?) {}
-        override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>?, authType: String?) {}
-        override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
-    })
-
-    private val sslContext = SSLContext.getInstance("TLS").apply {
-        init(null, trustAllCerts, java.security.SecureRandom())
-    }
-
+    // Use system default SSL context — removes trustAllCerts bypass (security fix)
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(0, TimeUnit.SECONDS)  // Disable read timeout for continuous WebSocket streaming
         .writeTimeout(0, TimeUnit.SECONDS) // Disable write timeout
         .pingInterval(30, TimeUnit.SECONDS) // WebSocket keepalive ping
-        .sslSocketFactory(sslContext.socketFactory, trustAllCerts[0] as X509TrustManager)
-        .hostnameVerifier { _, _ -> true }
         .build()
 
     val helloReceived = CompletableDeferred<Boolean>()
@@ -48,9 +37,8 @@ class WebsocketProtocol(private val deviceInfo: DeviceInfo,
     var otaWebsocketUrl: String? = null
     var otaWebsocketToken: String? = null
 
-    init {
-        sessionId = "your_session_id" // Mock session_id, actual from system
-    }
+    // sessionId is inherited from Protocol base class (empty by default)
+    // It will be populated from server's hello response
 
     override suspend fun start() {
         // Empty implementation, consistent with C++
@@ -112,6 +100,22 @@ class WebsocketProtocol(private val deviceInfo: DeviceInfo,
                         audioChannelStateFlow.emit(AudioState.OPENED)
                     }
 
+                    // CRITICAL: Block Hello message if device needs activation (OTA returned activation code)
+                    // This prevents translation mode (bot_mode=3) from bypassing registration check
+                    if (otaActivationCode != null) {
+                        Log.w(TAG, "⚠️ BLOCKING Hello message - device needs activation: code=$otaActivationCode")
+                        // Close websocket immediately to prevent any further communication
+                        webSocket.close(1008, "Device needs activation")
+                        scope.launch {
+                            networkErrorFlow.emit("Device needs activation: $otaActivationCode")
+                        }
+                        // Do not send Hello - device must complete OTA registration first
+                    } else {
+                        sendHelloMessage(webSocket)
+                    }
+                }
+
+                private fun sendHelloMessage(webSocket: WebSocket) {
                     // Send Hello message
                     val helloMessage = JSONObject().apply {
                         put("type", "hello")

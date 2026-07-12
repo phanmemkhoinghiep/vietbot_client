@@ -24,6 +24,7 @@ import vn.vietbot.client.mcp.tools.YouTubeMcpTool
 // import vn.vietbot.client.mcp.tools.ContactsTool
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.MediaType.Companion.toMediaType
 import java.security.cert.X509Certificate
@@ -80,6 +81,27 @@ class ChatViewMode @Inject constructor(
     // Translation manager for offline TTS playback
     private val translationManager = TranslationManager(context)
 
+    // Expose translation mode state for UI to disable text input
+    val isTranslationMode: StateFlow<Boolean> = translationManager.isTranslationMode
+
+    init {
+        // Wire up translation callbacks to keep display in sync with TTS playback
+        translationManager.onSegmentStart = { _ ->
+            // Mark the currently playing segment as played in the display
+            schedule {
+                display.markTranslationSegmentPlayed(display.currentTranslation.value?.segments?.indexOfFirst { !it.isPlayed } ?: -1)
+            }
+        }
+        translationManager.onAllFinished = {
+            // All translation segments have been spoken — exit translation mode
+            // so the input field becomes editable again.
+            schedule {
+                display.completeTranslation()
+                translationManager.stop()
+            }
+        }
+    }
+
     /**
      * Ensure OpusStreamPlayer is started for server audio playback.
      * Called on connect, tts.start, and translation mode activation.
@@ -90,7 +112,7 @@ class ChatViewMode @Inject constructor(
                 val sampleRate = 24000
                 val channels = 1
                 val frameSizeMs = 60
-                player = OpusStreamPlayer(sampleRate, channels, frameSizeMs)
+                player = OpusStreamPlayer(sampleRate, channels, frameSizeMs, settings, context)
                 player?.start(protocol!!.incomingAudioFlow)
                 Log.i(TAG, "OpusStreamPlayer started for audio playback")
             }
@@ -109,7 +131,7 @@ class ChatViewMode @Inject constructor(
             deviceStateFlow.value = value
         }
 
-    private var audioJobStarted = false
+    private val audioJobStarted = AtomicBoolean(false)
 
     // Text values that the app rendered locally as a typed user bubble, used to
     // dedup a possible stt echo from the server (legacy pipeline echoes the
@@ -180,18 +202,8 @@ class ChatViewMode @Inject constructor(
                 .removeSuffix("/")
         } ?: "https://vietbot.vn/ota/"
 
-    private val trustAllCerts = arrayOf<TrustManager>(object : X509TrustManager {
-        override fun checkClientTrusted(chain: Array<java.security.cert.X509Certificate>?, authType: String?) {}
-        override fun checkServerTrusted(chain: Array<java.security.cert.X509Certificate>?, authType: String?) {}
-        override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = arrayOf()
-    })
-
-    private val httpClient = OkHttpClient.Builder()
-        .sslSocketFactory(SSLContext.getInstance("TLS").apply {
-            init(null, trustAllCerts, java.security.SecureRandom())
-        }.socketFactory, trustAllCerts[0] as X509TrustManager)
-        .hostnameVerifier { _, _ -> true }
-        .build()
+    // Use default OkHttp SSL configuration (system trust store)
+    private val httpClient = OkHttpClient.Builder().build()
 
     /**
      * Gọi OTA API để lấy WebSocket URL và activation code
@@ -310,8 +322,7 @@ class ChatViewMode @Inject constructor(
                 protocol?.start()
 
                 // Start JSON message collector BEFORE openAudioChannel
-                if (!audioJobStarted) {
-                    audioJobStarted = true
+                if (!audioJobStarted.getAndSet(true)) {
                     launch {
                         protocol?.incomingJsonFlow?.collect { json ->
                             val type = json.optString("type")
@@ -355,12 +366,23 @@ class ChatViewMode @Inject constructor(
                                             if (text.isNotEmpty()) {
                                                 Log.i(TAG, "<< $text")
 
-                                                // Server sends translation text just like any other TTS text — no
-                                                // special prefix, no special routing. Render it like every
-                                                // other assistant sentence and let the server's audio
-                                                // stream (OpusStreamPlayer) handle playback.
-                                                schedule {
-                                                    display.appendTtsText(text)
+                                                // Check if this is a translation message with [TRANSLATION][xx-XX] prefix
+                                                if (translationManager.isTranslationMessage(text)) {
+                                                    // Route to TranslationManager for offline TTS and mode tracking
+                                                    translationManager.addTranslation(text)
+                                                    // Also display the translation text in chat (without the prefix)
+                                                    val segment = translationManager.parseTranslationMessage(text)
+                                                    if (segment != null) {
+                                                        schedule {
+                                                            display.addTranslationSegment(segment.text)
+                                                        }
+                                                    }
+                                                } else {
+                                                    // Normal TTS text — render like every other assistant sentence
+                                                    // and let the server's audio stream (OpusStreamPlayer) handle playback.
+                                                    schedule {
+                                                        display.appendTtsText(text)
+                                                    }
                                                 }
                                             }
                                         }
@@ -414,9 +436,20 @@ class ChatViewMode @Inject constructor(
                                 "device_bind_required" -> {
                                     val bindCode = json.optString("bind_code")
                                     val deviceId = json.optString("device_id")
-                                    Log.w(TAG, "Device needs binding: $deviceId, code: $bindCode")
+                                    val managerUrl = json.optString("manager_url")
+                                    Log.w(TAG, "Device needs binding: $deviceId, code: $bindCode, url: $managerUrl")
                                     schedule {
-                                        display.setChatMessage("system", "Thiết bị chưa được đăng ký!\nMã kích hoạt: $bindCode\n\nVui lòng đăng ký thiết bị trong ứng dụng Vietbot Manager.")
+                                        val msg = buildString {
+                                            append("⚠️ Thiết bị chưa được đăng ký!\n\n")
+                                            append("Mã kích hoạt: $bindCode\n\n")
+                                            if (managerUrl.isNotEmpty()) {
+                                                append("Vào trang quản lý để nhập mã:\n")
+                                                append(managerUrl)
+                                            } else {
+                                                append("Vui lòng đăng ký thiết bị trong ứng dụng Vietbot Manager.")
+                                            }
+                                        }
+                                        display.setChatMessage("system", msg, clickableUrl = managerUrl.takeIf { it.isNotEmpty() })
                                         deviceState = DeviceState.IDLE
                                     }
                                 }
@@ -442,7 +475,7 @@ class ChatViewMode @Inject constructor(
                             val sampleRate = 24000
                             val channels = 1
                             val frameSizeMs = 60
-                            player = OpusStreamPlayer(sampleRate, channels, frameSizeMs)
+                            player = OpusStreamPlayer(sampleRate, channels, frameSizeMs, settings, context)
                             player?.start(protocol!!.incomingAudioFlow)
                         }
                     }
@@ -451,14 +484,14 @@ class ChatViewMode @Inject constructor(
                 }
 
                 // Start audio recording job
-                if (audioJobStarted) {
+                if (audioJobStarted.get()) {
                     delay(1000)
                     launch {
                         val sampleRate = 16000
                         val channels = 1
                         val frameSizeMs = 60
                         encoder = OpusEncoder(sampleRate, channels, frameSizeMs)
-                        recorder = AudioRecorder(sampleRate, channels, frameSizeMs)
+                        recorder = AudioRecorder(sampleRate, channels, frameSizeMs, settings, context)
                         val audioFlow = recorder?.startRecording()
                         val opusFlow = audioFlow?.map { encoder?.encode(it) }
                         deviceState = DeviceState.LISTENING
@@ -508,7 +541,7 @@ class ChatViewMode @Inject constructor(
             _isConnected.value = false
             _isConnecting.value = false
             deviceState = DeviceState.IDLE
-            audioJobStarted = false
+            audioJobStarted.set(false)
         }
     }
 
@@ -734,8 +767,8 @@ class Display {
         )
     }
 
-    fun setChatMessage(sender: String, message: String, imageUri: String? = null, videoUri: String? = null, audioUri: String? = null) {
-        chatFlow.value = chatFlow.value + Message(sender, message, imageUri = imageUri, videoUri = videoUri, audioUri = audioUri)
+    fun setChatMessage(sender: String, message: String, imageUri: String? = null, videoUri: String? = null, audioUri: String? = null, clickableUrl: String? = null) {
+        chatFlow.value = chatFlow.value + Message(sender, message, imageUri = imageUri, videoUri = videoUri, audioUri = audioUri, clickableUrl = clickableUrl)
     }
 
     fun setEmotion(emotion: String) {
@@ -960,6 +993,7 @@ data class Message(
     val imageUri: String? = null,
     val videoUri: String? = null,
     val audioUri: String? = null,
+    val clickableUrl: String? = null,
     val isSeparator: Boolean = false,
     // True for the active streaming bubble (STT or TTS in progress).
     // - STT: shows user speech being recognized in real time (1 bubble per turn, text replaced)

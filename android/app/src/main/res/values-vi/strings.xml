@@ -44,4 +44,41 @@
     <string name="app_language">Ngôn ngữ ứng dụng</string>
     <string name="lang_vietnamese">Tiếng Việt</string>
     <string name="lang_english">English</string>
+    <string name="nav_about">Về Vietbot</string>
+    <string name="about_title">Về Vietbot</string>
+    <string name="about_subtitle">AI Voice Assistant Tiếng Việt Thế Hệ Mới</string>
+    <string name="about_version">Phiên bản: v2.5.0 (2026)</string>
+    <string name="about_author">Người lập trình: Thế Anh</string>
+    <string name="about_phone">Điện thoại: +84 938 388 286</string>
+    <string name="about_github">GitHub: github.com/phanmemkhoinghiep</string>
+    <string name="about_website">Website: vietbot.vn</string>
+    <string name="about_email">Email: contact@vietbot.vn</string>
+    <string name="about_tech_stack_title">Tech Stack</string>
+    <string name="about_tech_stack">Core Server (Python) + API Gateway (Java) + Web Manager (Vue) + Mobile Manager + IoT Firmware (ESP32) + Python Client</string>
+    <string name="about_ai_engine_title">AI Engine</string>
+    <string name="about_ai_engine">Gemini Live (model mới nhất) + Model dịch chuyên dụng + RAG + Embedding tối ưu + LLM Providers (Gemini, OpenAI, Coze, Dify, FastGPT, Ollama, Xinference, AliBL).</string>
+    <string name="about_clients_title">Đa nền tảng Client</string>
+    <string name="about_clients">Web Browser · Android (Kotlin) · ESP32 (80+ board) · Python Client (Raspberry Pi) · Loa thông minh.</string>
+    <string name="about_vision_title">Tầm nhìn</string>
+    <string name="about_vision">"Mang AI Voice Assistant tiếng Việt dễ thương, mạnh mẽ đến mọi nhà — qua mọi thiết bị."</string>
+    <string name="about_footer">Giấy phép MIT · © 2026 Vietbot — Made with ❤️ in Vietnam\nCommunity miễn phí · Enterprise triển khai local</string>
+
+    <!-- Device Selection -->
+    <string name="mic_source">Nguồn Mic</string>
+    <string name="mic_builtin">Mic tích hợp</string>
+    <string name="mic_bluetooth_sco">Bluetooth (SCO/Headset)</string>
+    <string name="mic_usb">USB Audio</string>
+    <string name="mic_glasses">Kính (HFP)</string>
+
+    <string name="speaker_output">Đầu ra Loa</string>
+    <string name="speaker_builtin">Loa ngoài</string>
+    <string name="speaker_earpiece">Tai nghe (Earpiece)</string>
+    <string name="speaker_bluetooth_a2dp">Bluetooth (A2DP/Stereo)</string>
+    <string name="speaker_usb">USB Audio</string>
+    <string name="speaker_glasses">Kính (A2DP/HFP)</string>
+
+    <!-- Camera Source labels -->
+    <string name="camera_source">Nguồn Camera</string>
+    <string name="camera_source_phone">Điện thoại</string>
+    <string name="camera_source_glasses">Kính</string>
 </resources>

@@ -1,7 +1,10 @@
 package vn.vietbot.client
 
+import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioTrack
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
@@ -13,11 +16,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import vn.vietbot.client.audio.AudioDeviceSelector
+import vn.vietbot.client.data.SettingsRepository
+import vn.vietbot.client.data.SpeakerOutput
 
 class OpusStreamPlayer(
     private val sampleRate: Int,
     private val channels: Int,
-    private val frameSizeMs: Int
+    private val frameSizeMs: Int,
+    private val settingsRepository: SettingsRepository,
+    private val context: Context
 ) {
     companion object {
         private const val TAG = "OpusStreamPlayer"
@@ -30,6 +38,8 @@ class OpusStreamPlayer(
     private val playerScope = CoroutineScope(Dispatchers.IO + Job())
     private var isPlaying = false
     private var decoder: OpusDecoder? = null
+    private var audioManager: AudioManager? = null
+    private var bluetoothScoStarted = false
 
     // Jitter buffer: holds decoded PCM between decode-coroutine and output-coroutine
     // Backed by Channel for FIFO ordering (matches ESP32's audio_playback_queue_)
@@ -43,23 +53,57 @@ class OpusStreamPlayer(
             AudioFormat.ENCODING_PCM_16BIT
         ) * 4 // Increase buffer size 4x for streaming headroom (was 2x - caused underflow)
 
-        audioTrack = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build()
-            )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setSampleRate(sampleRate)
-                    .setChannelMask(channelConfig)
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .build()
-            )
+        // Build AudioAttributes for voice communication (better AEC on Samsung)
+        val audioAttributes = AudioAttributes.Builder()
+            // Use VOICE_COMMUNICATION for better AEC on Samsung devices.
+            // This routes audio through the communication path where
+            // AcousticEchoCanceler is more effective. On Xiaomi 14T,
+            // hardware AEC is strong enough even with MEDIA usage.
+            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+            .build()
+
+        val audioFormat = AudioFormat.Builder()
+            .setSampleRate(sampleRate)
+            .setChannelMask(channelConfig)
+            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+            .build()
+
+        // Get preferred output device based on settings
+        val selectedOutput = settingsRepository.speakerOutput
+        val preferredDevice = AudioDeviceSelector.findOutputDevice(context, selectedOutput)
+
+        val builder = AudioTrack.Builder()
+            .setAudioAttributes(audioAttributes)
+            .setAudioFormat(audioFormat)
             .setBufferSizeInBytes(bufferSize)
             .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
+
+        audioTrack = builder.build()
+
+        // AudioTrack.setPreferredDevice() requires API 23+ (minSdk 24 OK).
+        // We apply this AFTER building AudioTrack to avoid Kotlin not finding
+        // AudioTrack.Builder.setPreferredDevice() at API 26 on some SDK stubs.
+        if (preferredDevice != null && android.os.Build.VERSION.SDK_INT >= 23) {
+            audioTrack.setPreferredDevice(preferredDevice)
+            Log.i(TAG, "Using preferred output device: ${preferredDevice.productName} (type=${preferredDevice.type})")
+        } else {
+            Log.i(TAG, "Using default output device (preferredDevice=null or SDK<23)")
+        }
+
+        // Bluetooth SCO handling for headset profile
+        // Start SCO for both A2DP (combo headset) and GLASSES
+        if (selectedOutput == SpeakerOutput.BLUETOOTH_A2DP || selectedOutput == SpeakerOutput.GLASSES) {
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            audioManager = am
+            // For Bluetooth SCO (headset/handsfree profile), need explicit start
+            if (am.isBluetoothScoAvailableOffCall && !am.isBluetoothScoOn) {
+                bluetoothScoStarted = true
+                am.isBluetoothScoOn = true
+                am.startBluetoothSco()
+                Log.i(TAG, "Bluetooth SCO started for output: $selectedOutput")
+            }
+        }
     }
 
     fun start(opusFlow: Flow<ByteArray>) {
@@ -123,6 +167,14 @@ class OpusStreamPlayer(
         stop()
         playbackQueue.close()
         audioTrack.release()
+
+        // Stop Bluetooth SCO if we started it
+        if (bluetoothScoStarted) {
+            audioManager?.stopBluetoothSco()
+            audioManager?.isBluetoothScoOn = false
+            bluetoothScoStarted = false
+            Log.i(TAG, "Bluetooth SCO stopped")
+        }
     }
 
     suspend fun waitForPlaybackCompletion() {

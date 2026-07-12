@@ -3,6 +3,7 @@ package vn.vietbot.client.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Settings
@@ -34,6 +36,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -81,15 +86,20 @@ import android.provider.MediaStore
 import android.os.Environment
 import android.content.ContentValues
 import vn.vietbot.client.R
+import vn.vietbot.client.audio.AudioDeviceSelector
 import vn.vietbot.client.data.CameraSource
 import vn.vietbot.client.data.MediaHistoryItem
+import vn.vietbot.client.data.MicSource
 import vn.vietbot.client.data.SettingsRepository
+import vn.vietbot.client.data.SpeakerOutput
 import vn.vietbot.client.mcp.SmartGlassesManager
 import vn.vietbot.client.ui.theme.AccentNeon
+import vn.vietbot.client.ui.theme.AccentPink
 import vn.vietbot.client.ui.theme.BgCard
 import vn.vietbot.client.ui.theme.BgDark
 import vn.vietbot.client.ui.theme.BorderNeon
 import vn.vietbot.client.ui.theme.TextMuted
+import vn.vietbot.client.util.TimeUtils
 import vn.vietbot.client.ui.theme.TextSecondary
 
 sealed class BottomNavItem(
@@ -559,15 +569,7 @@ fun MediaContent(
     }
 }
 
-private fun formatAge(deltaMillis: Long): String {
-    val seconds = deltaMillis / 1000
-    return when {
-        seconds < 60 -> "vừa xong"
-        seconds < 3600 -> "${seconds / 60} phút trước"
-        seconds < 86400 -> "${seconds / 3600} giờ trước"
-        else -> "${seconds / 86400} ngày trước"
-    }
-}
+private fun formatAge(deltaMillis: Long): String = TimeUtils.formatAge(deltaMillis)
 
 @Composable
 fun SettingsContent(
@@ -591,14 +593,14 @@ fun SettingsContent(
         "#9C27B0" to "Tím"
     )
     val presetBubbleColors = listOf(
-        "#E3F2FD" to "Xanh nhạt",
+        "#BBDEFB" to "Xanh nhạt",
         "#FFFFFF" to "Trắng",
-        "#F5F5F5" to "Xám nhạt",
-        "#FFF3E0" to "Cam nhạt",
-        "#E8F5E9" to "Xanh lá nhạt",
-        "#F3E5F5" to "Tím nhạt",
-        "#FFEBEE" to "Đỏ nhạt",
-        "#E0F7FA" to "Cyan nhạt"
+        "#E0E0E0" to "Xám nhạt",
+        "#FFCC80" to "Cam nhạt",
+        "#A5D6A7" to "Xanh lá nhạt",
+        "#CE93D8" to "Tím nhạt",
+        "#EF9A9A" to "Đỏ nhạt",
+        "#80DEEA" to "Cyan nhạt"
     )
 
     var selectedFontFamily by remember { mutableStateOf(settingsRepository.fontFamily) }
@@ -608,6 +610,8 @@ fun SettingsContent(
     var cameraSource by remember { mutableStateOf(settingsRepository.cameraSource) }
     var useOfflineTts by remember { mutableStateOf(settingsRepository.useOfflineTts) }
     var appLanguage by remember { mutableStateOf(settingsRepository.appLanguage) }
+    var micSource by remember { mutableStateOf(settingsRepository.micSource) }
+    var speakerOutput by remember { mutableStateOf(settingsRepository.speakerOutput) }
     // Use parameter isGlassesConnected instead of local state
     var glassesBatteryLevel by remember { mutableIntStateOf(settingsRepository.glassesBatteryLevel) }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -669,165 +673,120 @@ fun SettingsContent(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Glasses Connection Section - Neon Style
-        NeonSettingsSection(title = "Nguồn Camera") {
-            Column {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = if (isGlassesConnected) Icons.Filled.BluetoothConnected else Icons.Filled.Bluetooth,
-                        contentDescription = "Glasses",
-                        modifier = Modifier.size(20.dp),
-                        tint = if (isGlassesConnected) AccentNeon else TextMuted
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (isGlassesConnected) "Đã chọn thiết bị ${glassesDeviceName ?: "kính"}" else "Chưa kết nối kính",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (isGlassesConnected) AccentNeon else TextSecondary
-                        )
-                        if (isGlassesConnected && glassesBatteryLevel >= 0) {
-                            Text(
-                                text = "Pin: $glassesBatteryLevel%",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = TextMuted
-                            )
-                        }
-                    }
-                }
-
-                // Camera source toggle
-                Spacer(modifier = Modifier.height(2.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    CameraSourceChip(
-                        label = "Điện thoại",
-                        emoji = "📱",
-                        isSelected = cameraSource == CameraSource.PHONE,
-                        onClick = {
-                            cameraSource = CameraSource.PHONE
-                            settingsRepository.cameraSource = CameraSource.PHONE
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    CameraSourceChip(
-                        label = "Kính",
-                        emoji = "👓",
-                        isSelected = cameraSource == CameraSource.GLASSES,
-                        isEnabled = isGlassesConnected,
-                        onClick = {
-                            if (isGlassesConnected) {
-                                cameraSource = CameraSource.GLASSES
-                                settingsRepository.cameraSource = CameraSource.GLASSES
-                            }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Test capture button - use CameraMcpTools pattern with background thread
-                val context = androidx.compose.ui.platform.LocalContext.current
-                var testResult by remember { mutableStateOf<String?>(null) }
-                var testCaptureJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-
-                Button(
-                    onClick = {
-                        if (cameraSource == CameraSource.PHONE) {
-                            testResult = "Đang chụp ảnh từ điện thoại..."
-                            testCaptureJob?.cancel()
-                            testCaptureJob = GlobalScope.launch(Dispatchers.IO) {
-                                val result = capturePhotoWithCameraMcpTools(context)
-                                withContext(Dispatchers.Main) {
-                                    testResult = result
-                                }
-                            }
-                        } else {
-                            // Test glasses camera
-                            if (glassesManager != null && glassesManager.isGlassesConnected()) {
-                                testResult = "Đang chụp ảnh từ kính..."
-                                glassesManager.takeTestPhoto { imageData ->
-                                    if (imageData != null && imageData.isNotEmpty()) {
-                                        saveToGallery(context, imageData, "Glasses_Test")
-                                        testResult = "Đã lưu ảnh từ kính (${imageData.size} bytes)"
-                                    } else {
-                                        testResult = "Chưa nhận được ảnh từ kính"
-                                    }
-                                }
-                            } else {
-                                testResult = "Kính chưa kết nối"
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentNeon)
-                ) {
-                    Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Test Chụp Ảnh (${if (cameraSource == CameraSource.PHONE) "Điện thoại" else "Kính"})")
-                }
-
-                // Show test result
-                testResult?.let { result ->
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = result,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AccentNeon.copy(alpha = 0.8f)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Button to navigate to Glasses Selection
-                Card(
-                    onClick = onNavigateToGlasses,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = AccentNeon.copy(alpha = 0.15f)
-                    ),
-                    border = BorderStroke(1.dp, AccentNeon.copy(alpha = 0.4f))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Bluetooth,
-                            contentDescription = null,
-                            tint = AccentNeon,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (isGlassesConnected) "Quản lý kết nối kính" else "Kết nối kính HeyCyan",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color = AccentNeon
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Filled.ChevronRight,
-                            contentDescription = null,
-                            tint = AccentNeon,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
+        // Camera Source Section - Dropdown like mic/speaker
+        NeonSettingsSection(title = stringResource(R.string.camera_source)) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val availableCameraSources = remember(isGlassesConnected) {
+                val list = mutableListOf(CameraSource.PHONE)
+                if (isGlassesConnected) list.add(CameraSource.GLASSES)
+                list
             }
+            val effectiveCameraSource = if (availableCameraSources.contains(cameraSource)) cameraSource else availableCameraSources.firstOrNull() ?: CameraSource.PHONE
+
+            // Pre-resolve labels
+            val labelPhone = stringResource(R.string.camera_source_phone)
+            val labelGlasses = stringResource(R.string.camera_source_glasses)
+
+            DeviceDropdownSection(
+                options = availableCameraSources,
+                selectedValue = effectiveCameraSource,
+                onValueChange = { newSource ->
+                    if (availableCameraSources.contains(newSource)) {
+                        cameraSource = newSource
+                        settingsRepository.cameraSource = newSource
+                    }
+                },
+                labelProvider = { source ->
+                    when (source) {
+                        CameraSource.PHONE -> labelPhone
+                        CameraSource.GLASSES -> labelGlasses
+                    }
+                },
+                isEnabledProvider = { source ->
+                    source != CameraSource.GLASSES || isGlassesConnected
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Mic Source Section
+        NeonSettingsSection(title = stringResource(R.string.mic_source)) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val availableMicSources = remember(isGlassesConnected) {
+                AudioDeviceSelector.getAvailableMicSources(context, isGlassesConnected)
+            }
+            // Ensure current selection is in available list; if not, force a valid one
+            val effectiveMicSource = if (availableMicSources.contains(micSource)) micSource else (availableMicSources.firstOrNull() ?: MicSource.BUILTIN)
+
+            // Pre-resolve labels for all mic sources to avoid @Composable invocations in non-composable lambda
+            val labelBuiltin = stringResource(R.string.mic_builtin)
+            val labelBtSco = stringResource(R.string.mic_bluetooth_sco)
+            val labelUsb = stringResource(R.string.mic_usb)
+            val labelGlasses = stringResource(R.string.mic_glasses)
+
+            DeviceDropdownSection(
+                options = availableMicSources,
+                selectedValue = effectiveMicSource,
+                onValueChange = { newSource ->
+                    if (availableMicSources.contains(newSource)) {
+                        micSource = newSource
+                        settingsRepository.micSource = newSource
+                    }
+                },
+                labelProvider = { source ->
+                    when (source) {
+                        MicSource.BUILTIN -> labelBuiltin
+                        MicSource.BLUETOOTH_SCO -> labelBtSco
+                        MicSource.USB -> labelUsb
+                        MicSource.GLASSES -> labelGlasses
+                    }
+                },
+                isEnabledProvider = { source ->
+                    source != MicSource.GLASSES || isGlassesConnected
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Speaker Output Section
+        NeonSettingsSection(title = stringResource(R.string.speaker_output)) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val availableSpeakers = remember(isGlassesConnected) {
+                AudioDeviceSelector.getAvailableSpeakerOutputs(context, isGlassesConnected)
+            }
+            val effectiveSpeaker = if (availableSpeakers.contains(speakerOutput)) speakerOutput else (availableSpeakers.firstOrNull() ?: SpeakerOutput.BUILTIN_SPEAKER)
+
+            // Pre-resolve labels for all speaker outputs
+            val labelBuiltInSpeaker = stringResource(R.string.speaker_builtin)
+            val labelEarpiece = stringResource(R.string.speaker_earpiece)
+            val labelBtA2dp = stringResource(R.string.speaker_bluetooth_a2dp)
+            val labelSpeakerUsb = stringResource(R.string.speaker_usb)
+            val labelSpeakerGlasses = stringResource(R.string.speaker_glasses)
+
+            DeviceDropdownSection(
+                options = availableSpeakers,
+                selectedValue = effectiveSpeaker,
+                onValueChange = { newOutput ->
+                    if (availableSpeakers.contains(newOutput)) {
+                        speakerOutput = newOutput
+                        settingsRepository.speakerOutput = newOutput
+                    }
+                },
+                labelProvider = { output ->
+                    when (output) {
+                        SpeakerOutput.BUILTIN_SPEAKER -> labelBuiltInSpeaker
+                        SpeakerOutput.EARPIECE -> labelEarpiece
+                        SpeakerOutput.BLUETOOTH_A2DP -> labelBtA2dp
+                        SpeakerOutput.USB -> labelSpeakerUsb
+                        SpeakerOutput.GLASSES -> labelSpeakerGlasses
+                    }
+                },
+                isEnabledProvider = { output ->
+                    output != SpeakerOutput.GLASSES || isGlassesConnected
+                }
+            )
         }
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -1030,27 +989,101 @@ fun SettingsContent(
                         .background(BorderNeon.copy(alpha = 0.15f))
                 )
 
-                // Copyright
+                // About Vietbot section (unified content from landing_page)
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "© 2026 VietBot. Built with ❤️",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextMuted
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Sử dụng Gemini Live API và tương thích với Xiaozhi Client",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextMuted.copy(alpha = 0.7f)
+                        text = "🤖🌟 " + stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = AccentNeon
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "VietBot là sản phẩm phổ cập AI cho cộng đồng, không kinh doanh, không thu phí người dùng.",
+                        text = stringResource(R.string.about_subtitle),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.about_version),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                    Text(
+                        text = stringResource(R.string.about_author),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                    Text(
+                        text = stringResource(R.string.about_phone),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                    Text(
+                        text = stringResource(R.string.about_website),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AccentNeon
+                    )
+                    Text(
+                        text = stringResource(R.string.about_email),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.about_tech_stack_title),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = AccentNeon
+                    )
+                    Text(
+                        text = stringResource(R.string.about_tech_stack),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.about_ai_engine_title),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = AccentNeon
+                    )
+                    Text(
+                        text = stringResource(R.string.about_ai_engine),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.about_clients_title),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = AccentNeon
+                    )
+                    Text(
+                        text = stringResource(R.string.about_clients),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "💕 " + stringResource(R.string.about_vision_title),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = AccentPink
+                    )
+                    Text(
+                        text = stringResource(R.string.about_vision),
+                        style = MaterialTheme.typography.labelSmall.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
+                        color = TextSecondary,
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.about_footer),
                         style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                        color = TextMuted.copy(alpha = 0.6f),
+                        color = TextMuted.copy(alpha = 0.7f),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 8.dp)
                     )
                 }
@@ -1230,6 +1263,11 @@ fun ColorCircle(
                         color = Color(android.graphics.Color.parseColor(hexColor)),
                         shape = RoundedCornerShape(50)
                     )
+                    .border(
+                        width = 1.dp,
+                        color = BorderNeon.copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(50)
+                    )
                     .then(
                         if (isSelected) Modifier.background(
                             brush = Brush.radialGradient(
@@ -1333,6 +1371,69 @@ fun CameraSourceChip(
                 },
                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
             )
+        }
+    }
+}
+
+/**
+ * Generic DropdownMenu section for device selection (mic/speaker).
+ * Follows the NeonSettingsSection visual style.
+ */
+@Composable
+fun <T> DeviceDropdownSection(
+    options: List<T>,
+    selectedValue: T,
+    onValueChange: (T) -> Unit,
+    labelProvider: (T) -> String,
+    isEnabledProvider: (T) -> Boolean = { true }
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = labelProvider(selectedValue)
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = selectedLabel,
+            style = MaterialTheme.typography.bodyMedium,
+            color = AccentNeon,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp, horizontal = 4.dp)
+                .background(BgCard)
+        )
+        Icon(
+            imageVector = Icons.Filled.ExpandMore,
+            contentDescription = null,
+            tint = AccentNeon,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(16.dp)
+        )
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(220.dp)
+        ) {
+            options.forEach { option ->
+                val enabled = isEnabledProvider(option)
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = labelProvider(option),
+                            color = if (enabled) TextSecondary else TextMuted,
+                            modifier = Modifier.padding(vertical = 4.dp, horizontal = 16.dp)
+                        )
+                    },
+                    onClick = {
+                        if (enabled) {
+                            onValueChange(option)
+                            expanded = false
+                        }
+                    },
+                    enabled = enabled
+                )
+                if (option != options.last()) HorizontalDivider()
+            }
         }
     }
 }

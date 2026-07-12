@@ -461,16 +461,20 @@ class SmartGlassesManager @Inject constructor(
                 val adapter = BluetoothAdapter.getDefaultAdapter()
                 if (adapter != null) {
                     val device = adapter.getRemoteDevice(savedAddress)
-                    val connectionIntents = device.javaClass.getMethod("isConnected")
-                    val isConnected = connectionIntents.invoke(device) as Boolean
+                    // Use reflection with declaredMethod to avoid NoSuchMethodError on OEM ROMs
+                    val connectionMethod = device.javaClass.getDeclaredMethod("isConnected")
+                    connectionMethod.isAccessible = true
+                    val isConnected = connectionMethod.invoke(device) as Boolean
                     if (isConnected) {
                         // Update state to reflect actual connection
                         _connectionState.value = GlassesConnectionState.CONNECTED
                         return true
                     }
                 }
+            } catch (e: NoSuchMethodException) {
+                Log.w(TAG, "isConnected method not available on this device")
             } catch (e: Exception) {
-                // Ignore errors, just return false
+                Log.d(TAG, "Failed to check connection via reflection: ${e.message}")
             }
         }
         return false
@@ -642,6 +646,7 @@ class SmartGlassesManager @Inject constructor(
         testPhotoTimeout?.removeCallbacksAndMessages(null)
         testPhotoCallback = null
         sdkInitialized = false
+        instance = null  // Clear singleton reference to allow re-initialization
     }
 
     /**

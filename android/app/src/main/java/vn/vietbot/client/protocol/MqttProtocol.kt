@@ -25,6 +25,7 @@ class MqttProtocol(
     private val channelMutex = Any()
     private var isReconnecting = false
     private var pendingHello = false
+    private var reconnectJob: Job? = null
 
     // Use broker URL from config (includes protocol and port)
     private var endpoint: String = mqttBrokerUrl
@@ -44,7 +45,8 @@ class MqttProtocol(
         get() {
             val host = mqttConfig.endpoint.removePrefix("tcp://").removePrefix("ssl://")
                 .substringBefore(":")  // Strip any existing port
-            return if (mqttConfig.port == 8883) "ssl://$host:${mqttConfig.port}"
+            // Use TLS for standard MQTT TLS port, MQTT-only if user explicitly configured non-TLS port
+            return if (mqttConfig.port == 8883 || mqttConfig.port == 8884) "ssl://$host:${mqttConfig.port}"
                    else "tcp://$host:${mqttConfig.port}"
         }
 
@@ -88,6 +90,8 @@ class MqttProtocol(
                 override fun connectionLost(cause: Throwable?) {
                     Log.i(TAG, "Disconnected from endpoint")
                     scope.launch { networkErrorFlow.emit("Connection lost") }
+                    // Exponential backoff reconnect (Android 15 safe)
+                    scheduleReconnect()
                 }
 
                 override fun messageArrived(topic: String, message: MqttMessage) {
@@ -135,6 +139,33 @@ class MqttProtocol(
         } catch (e: MqttException) {
             Log.e(TAG, "Failed to connect to endpoint", e)
             networkErrorFlow.emit("Server not connected")
+            scheduleReconnect()
+        }
+    }
+
+    private fun scheduleReconnect() {
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            var delayMs = 1000L
+            val maxDelayMs = 30000L
+            var attempt = 0
+            while (attempt < 5) {  // Max 5 attempts
+                try {
+                    delay(delayMs)
+                    if (!isReconnecting) {
+                        isReconnecting = true
+                        Log.i(TAG, "Attempting reconnect (attempt ${attempt + 1}/5)")
+                        startMqttClient()
+                        return@launch
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Reconnect attempt failed", e)
+                }
+                attempt++
+                delayMs = (delayMs * 2).coerceAtMost(maxDelayMs)
+            }
+            Log.e(TAG, "Max reconnect attempts reached, giving up")
+            scope.launch { networkErrorFlow.emit("Reconnect failed after 5 attempts") }
         }
     }
 
@@ -309,6 +340,9 @@ class MqttProtocol(
     }
 
     private fun decodeHexString(hexString: String): ByteArray {
+        require(hexString.length % 2 == 0 && hexString.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) {
+            "Invalid hex string: $hexString"
+        }
         return hexString.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
     }
 
@@ -340,16 +374,16 @@ class MqttProtocol(
             Log.i(TAG, "Sent MCP initialize response")
         }
 
-        // Handle tools/list request from server
+        // Handle tools/list request from server - forward to ChatViewModel
         if (method == "tools/list") {
-            // MqttProtocol uses a static method without access to McpServer
-            // Forward to ChatViewModel via incomingJsonFlow for processing
-            Log.i(TAG, "MCP tools/list received via MQTT - forwarding for processing")
-            // The tools/list will be handled by ChatViewModel's incomingJsonFlow collector
+            Log.i(TAG, "MCP tools/list received via MQTT - forwarding to jsonChannel")
+            jsonChannel.send(json)
         }
     }
 
     override fun dispose() {
+        reconnectJob?.cancel()
+        reconnectJob = null
         scope.cancel()
         mqttClient?.disconnect()
         udpClient?.close()
@@ -366,6 +400,7 @@ class UdpClient(
     private var serverAddress: InetAddress? = null
     private var isRunning = false
     private var onMessage: ((ByteArray) -> Unit)? = null
+    private var consecutiveSendErrors = 0
 
     init {
         try {
@@ -389,8 +424,14 @@ class UdpClient(
         try {
             val packet = DatagramPacket(data, data.size, addr, port)
             sock.send(packet)
+            // Reset error counter on successful send
+            if (consecutiveSendErrors > 0) consecutiveSendErrors = 0
         } catch (e: Exception) {
-            // Silent fail - audio loss acceptable
+            consecutiveSendErrors++
+            // Log only every 100th consecutive error to avoid spam
+            if (consecutiveSendErrors % 100 == 1) {
+                Log.w(TAG, "UDP send failed ($consecutiveSendErrors consecutive errors): ${e.message}")
+            }
         }
     }
 

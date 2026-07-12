@@ -15,8 +15,15 @@ android {
         applicationId = "vn.vietbot.client"
         minSdk = 24
         targetSdk = 35
-        versionCode = 11
-        versionName = "1.1"
+
+        // Auto-increment versionCode on each build.
+        // Pass -PbuildNumber=N or env BUILD_NUMBER=N to bump.
+        // Default: start at 12 (previous build was 11).
+        val buildNumber = System.getenv("BUILD_NUMBER")?.toIntOrNull()
+            ?: (project.findProperty("buildNumber") as String?)?.toIntOrNull()
+            ?: 1
+        versionCode = 11 + buildNumber
+        versionName = "1.${buildNumber}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

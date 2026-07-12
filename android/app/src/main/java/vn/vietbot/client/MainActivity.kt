@@ -155,6 +155,12 @@ class MainActivity : ComponentActivity(), LifecycleOwner {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             critical.add(Manifest.permission.READ_MEDIA_IMAGES)
             critical.add(Manifest.permission.READ_MEDIA_VIDEO)
+            critical.add(Manifest.permission.READ_MEDIA_AUDIO)
+            critical.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        // Android 13+: NEARBY_WIFI_DEVICES for WiFi P2P
+        if (Build.VERSION.SDK_INT >= 33) {
+            critical.add(Manifest.permission.NEARBY_WIFI_DEVICES)
         }
         val notGranted = critical.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED

@@ -2,6 +2,9 @@ package vn.vietbot.client.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONObject
 import vn.vietbot.client.data.model.MqttConfig
 import vn.vietbot.client.data.model.TransportType
@@ -9,6 +12,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 enum class CameraSource { PHONE, GLASSES }
+enum class MicSource { BUILTIN, BLUETOOTH_SCO, USB, GLASSES }
+enum class SpeakerOutput { BUILTIN_SPEAKER, EARPIECE, BLUETOOTH_A2DP, USB, GLASSES }
 
 /**
  * Media playback history item for tracking YouTube/music playback
@@ -30,6 +35,13 @@ interface SettingsRepository {
 
     // Camera source for AI vision / photo
     var cameraSource: CameraSource
+    val cameraSourceFlow: StateFlow<CameraSource>  // Reactive stream for camera source changes
+
+    // Audio device selection
+    var micSource: MicSource
+    val micSourceFlow: StateFlow<MicSource>
+    var speakerOutput: SpeakerOutput
+    val speakerOutputFlow: StateFlow<SpeakerOutput>
 
     // Translation TTS mode: true = offline (local TTS, faster), false = server audio (slower, higher quality)
     var useOfflineTts: Boolean
@@ -70,6 +82,8 @@ class SettingsRepositoryImpl @Inject constructor(
         private const val KEY_TEXT_COLOR = "text_color"
         private const val KEY_BUBBLE_COLOR = "bubble_color"
         private const val KEY_CAMERA_SOURCE = "camera_source"
+        private const val KEY_MIC_SOURCE = "mic_source"
+        private const val KEY_SPEAKER_OUTPUT = "speaker_output"
         private const val KEY_USE_OFFLINE_TTS = "use_offline_tts"
         private const val KEY_APP_LANGUAGE = "app_language"
         private const val KEY_GLASSES_ADDRESS = "glasses_address"
@@ -79,6 +93,15 @@ class SettingsRepositoryImpl @Inject constructor(
     }
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    // Reactive camera source flow for ChatViewModel/SmartGlassesManager to observe
+    private val _cameraSourceFlow = MutableStateFlow<CameraSource>(
+        try {
+            val value = prefs.getString(KEY_CAMERA_SOURCE, CameraSource.PHONE.name)
+            CameraSource.valueOf(value ?: CameraSource.PHONE.name)
+        } catch (e: Exception) { CameraSource.PHONE }
+    )
+    override val cameraSourceFlow: StateFlow<CameraSource> = _cameraSourceFlow.asStateFlow()
 
     // Runtime flags (not persisted)
     override var isGlassesConnected: Boolean = false
@@ -144,11 +167,43 @@ class SettingsRepositoryImpl @Inject constructor(
         set(value) { prefs.edit().putString(KEY_BUBBLE_COLOR, value).apply() }
 
     override var cameraSource: CameraSource
-        get() = try {
-            val value = prefs.getString(KEY_CAMERA_SOURCE, CameraSource.PHONE.name)
-            CameraSource.valueOf(value ?: CameraSource.PHONE.name)
-        } catch (e: Exception) { CameraSource.PHONE }
-        set(value) { prefs.edit().putString(KEY_CAMERA_SOURCE, value.name).apply() }
+        get() = _cameraSourceFlow.value
+        set(value) {
+            prefs.edit().putString(KEY_CAMERA_SOURCE, value.name).apply()
+            _cameraSourceFlow.value = value  // Emit to reactive flow
+        }
+
+    // Reactive mic source flow
+    private val _micSourceFlow = MutableStateFlow<MicSource>(
+        try {
+            val value = prefs.getString(KEY_MIC_SOURCE, MicSource.BUILTIN.name)
+            MicSource.valueOf(value ?: MicSource.BUILTIN.name)
+        } catch (e: Exception) { MicSource.BUILTIN }
+    )
+    override val micSourceFlow: StateFlow<MicSource> = _micSourceFlow.asStateFlow()
+
+    override var micSource: MicSource
+        get() = _micSourceFlow.value
+        set(value) {
+            prefs.edit().putString(KEY_MIC_SOURCE, value.name).apply()
+            _micSourceFlow.value = value
+        }
+
+    // Reactive speaker output flow
+    private val _speakerOutputFlow = MutableStateFlow<SpeakerOutput>(
+        try {
+            val value = prefs.getString(KEY_SPEAKER_OUTPUT, SpeakerOutput.BUILTIN_SPEAKER.name)
+            SpeakerOutput.valueOf(value ?: SpeakerOutput.BUILTIN_SPEAKER.name)
+        } catch (e: Exception) { SpeakerOutput.BUILTIN_SPEAKER }
+    )
+    override val speakerOutputFlow: StateFlow<SpeakerOutput> = _speakerOutputFlow.asStateFlow()
+
+    override var speakerOutput: SpeakerOutput
+        get() = _speakerOutputFlow.value
+        set(value) {
+            prefs.edit().putString(KEY_SPEAKER_OUTPUT, value.name).apply()
+            _speakerOutputFlow.value = value
+        }
 
     override var useOfflineTts: Boolean
         get() = prefs.getBoolean(KEY_USE_OFFLINE_TTS, true)  // default: fast translation
