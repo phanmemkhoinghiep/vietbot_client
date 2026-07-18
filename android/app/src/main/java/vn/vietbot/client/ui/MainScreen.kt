@@ -613,7 +613,6 @@ fun SettingsContent(
     var selectedTextColor by remember { mutableStateOf(settingsRepository.textColorHex) }
     var selectedBubbleColor by remember { mutableStateOf(settingsRepository.bubbleColorHex) }
     var cameraSource by remember { mutableStateOf(settingsRepository.cameraSource) }
-    var useOfflineTts by remember { mutableStateOf(settingsRepository.useOfflineTts) }
     var appLanguage by remember { mutableStateOf(settingsRepository.appLanguage) }
     var micSource by remember { mutableStateOf(settingsRepository.micSource) }
     var speakerOutput by remember { mutableStateOf(settingsRepository.speakerOutput) }
@@ -760,40 +759,6 @@ fun SettingsContent(
         Spacer(modifier = Modifier.height(10.dp))
 
         // Speaker Output Section
-        NeonSettingsSection(title = stringResource(R.string.speaker_output)) {
-            val context = androidx.compose.ui.platform.LocalContext.current
-            val availableSpeakers = AudioDeviceSelector.getAvailableSpeakerOutputs(context, isGlassesConnected)
-            val effectiveSpeaker = if (availableSpeakers.contains(speakerOutput)) speakerOutput else (availableSpeakers.firstOrNull() ?: SpeakerOutput.BUILTIN_SPEAKER)
-
-            // Pre-resolve labels
-            val labelBuiltInSpeaker = stringResource(R.string.speaker_builtin)
-            val labelEarpiece = stringResource(R.string.speaker_earpiece)
-
-            DeviceDropdownSection(
-                options = availableSpeakers,
-                selectedValue = effectiveSpeaker,
-                onValueChange = { newOutput ->
-                    Log.i("SettingsContent", "🔀 Speaker dropdown onValueChange: $speakerOutput → $newOutput")
-                    if (availableSpeakers.contains(newOutput)) {
-                        speakerOutput = newOutput
-                        settingsRepository.speakerOutput = newOutput
-                        applyAudioDeviceChange()
-                    }
-                },
-                labelProvider = { output ->
-                    when (output) {
-                        SpeakerOutput.BUILTIN_SPEAKER -> labelBuiltInSpeaker
-                        SpeakerOutput.EARPIECE -> labelEarpiece
-                    }
-                },
-                isEnabledProvider = { _ ->
-                    true  // Both BUILTIN_SPEAKER and EARPIECE always available
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
         // Font Family Section
         NeonSettingsSection(title = stringResource(R.string.font_family)) {
             fontFamilies.forEach { font ->
@@ -1388,6 +1353,7 @@ fun <T> DeviceDropdownSection(
     selectedValue: T,
     onValueChange: (T) -> Unit,
     labelProvider: (T) -> String,
+    descriptionProvider: (T) -> String = { "" },
     isEnabledProvider: (T) -> Boolean = { true }
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -1424,11 +1390,24 @@ fun <T> DeviceDropdownSection(
                 val enabled = isEnabledProvider(option)
                 DropdownMenuItem(
                     text = {
-                        Text(
-                            text = labelProvider(option),
-                            color = if (enabled) TextSecondary else TextMuted,
+                        Column(
                             modifier = Modifier.padding(vertical = 4.dp, horizontal = 16.dp)
-                        )
+                        ) {
+                            Text(
+                                text = labelProvider(option),
+                                color = if (enabled) TextSecondary else TextMuted,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            val desc = descriptionProvider(option)
+                            if (desc.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = desc,
+                                    color = TextMuted,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                        }
                     },
                     onClick = {
                         if (enabled) {

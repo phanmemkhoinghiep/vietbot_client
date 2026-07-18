@@ -27,12 +27,13 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Limit native ABIs to keep APK small. Default: armeabi-v7a (32-bit ARM).
-        // To build for other ABIs, pass:
+        // Build native libraries for all common Android ABIs (32-bit + 64-bit).
+        // Google Play requires 64-bit for apps with native libs since Aug 2019.
+        // To build a subset, pass:
         //   ./gradlew :app:assembleDebug -PdefaultAbiFilters=armeabi-v7a,arm64-v8a
         // or edit the list below.
         val abiList = (project.findProperty("defaultAbiFilters") as String?)
-            ?: "armeabi-v7a"
+            ?: "armeabi-v7a,arm64-v8a,x86,x86_64"
         ndk {
             abiFilters += abiList.split(",").map { it.trim() }
         }
@@ -45,9 +46,21 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            // Use debug keystore for local builds; override with real keystore for production.
+            storeFile = file(System.getenv("ANDROID_KEYSTORE")
+                ?: "${System.getProperty("user.home")}/.android/debug.keystore")
+            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "android"
+            keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: "androiddebugkey"
+            keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

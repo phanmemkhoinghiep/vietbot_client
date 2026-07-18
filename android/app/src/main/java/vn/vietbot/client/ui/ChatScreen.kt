@@ -102,6 +102,8 @@ fun ChatScreen(
     // Active translation card (server sends [TRANSLATION][xx-XX]<text> via TTS sentence_start).
     // Observed here so the rendered card re-composes when new segments arrive or are spoken.
     val currentTranslation by viewModel.display.currentTranslation.collectAsState()
+    // 🔥 NEW: Original translation card (user's spoken language) - dual mode
+    val currentOriginalTranslation by viewModel.display.currentOriginalTranslation.collectAsState()
     var textInput by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
 
@@ -284,6 +286,19 @@ fun ChatScreen(
                         translation = translation,
                         textColor = textColor,
                         bubbleColor = bubbleColor,
+                        fontSize = fontSize,
+                        fontFamily = fontFamily
+                    )
+                }
+            }
+            // 🔥 NEW: Original translation card (dual mode - user's spoken language)
+            // Appears BELOW the translated text card
+            currentOriginalTranslation?.let { originalTranslation ->
+                item {
+                    OriginalTranslationDisplayCard(
+                        translation = originalTranslation,
+                        textColor = textColor,
+                        bubbleColor = bubbleColor.copy(alpha = 0.9f), // Slightly different color
                         fontSize = fontSize,
                         fontFamily = fontFamily
                     )
@@ -659,6 +674,83 @@ fun TranslationDisplayCard(
             Spacer(modifier = Modifier.height(4.dp))
 
             // Translation segments - played text is bold/highlighted, upcoming text is dimmed
+            val annotatedText = buildAnnotatedString {
+                translation.segments.forEachIndexed { index, segment ->
+                    withStyle(
+                        style = SpanStyle(
+                            color = if (segment.isPlayed) textColor else textColor.copy(alpha = 0.5f),
+                            fontWeight = if (segment.isPlayed) FontWeight.Bold else FontWeight.Normal,
+                            textDecoration = if (segment.isPlayed) TextDecoration.Underline else TextDecoration.None
+                        )
+                    ) {
+                        append(segment.text)
+                    }
+                    if (index < translation.segments.size - 1) {
+                        append(" ")
+                    }
+                }
+            }
+
+            Text(
+                text = annotatedText,
+                style = TextStyle(
+                    fontFamily = getFontFamily(fontFamily),
+                    fontSize = fontSize.sp
+                ),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Justify
+            )
+        }
+    }
+}
+
+/**
+ * 🔥 NEW: Original translation card (dual mode)
+ * Shows the user's original speech (e.g., Vietnamese) when bot_language matches input.
+ * Appears BELOW the translated text card.
+ * Audio: offline TTS → Bluetooth headset
+ */
+@Composable
+fun OriginalTranslationDisplayCard(
+    translation: OriginalTranslationDisplay,
+    textColor: Color = Color.Black,
+    bubbleColor: Color = Color(0xFFFFF3E0), // Light orange to differentiate
+    fontSize: Int = 14,
+    fontFamily: String = "System"
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = bubbleColor // Different color to distinguish from translated
+        ),
+        border = BorderStroke(1.dp, Color(0xFFFF9800).copy(alpha = 0.4f))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            // Original translation header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "🎤 Bản gốc (Tai nghe)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFFFF9800)
+                )
+                if (!translation.isComplete) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        strokeWidth = 1.5.dp,
+                        color = Color(0xFFFF9800)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Original text segments - played text is bold/highlighted
             val annotatedText = buildAnnotatedString {
                 translation.segments.forEachIndexed { index, segment ->
                     withStyle(

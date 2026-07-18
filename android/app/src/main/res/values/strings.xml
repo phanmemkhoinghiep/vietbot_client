@@ -38,10 +38,10 @@
     <string name="connecting">Connecting...</string>
     <string name="disconnected">Disconnected</string>
     <string name="translation_tts_mode">Translation TTS Mode</string>
-    <string name="fast_translation">Fast translation (offline TTS)</string>
-    <string name="fast_translation_desc">Use device local TTS. Lower latency, voice quality depends on the device.</string>
-    <string name="slow_translation">High-quality translation (server audio)</string>
-    <string name="slow_translation_desc">Wait for the server to synthesize audio. Higher quality but higher latency.</string>
+    <string name="offline_tts">Device TTS (Fast)</string>
+    <string name="offline_tts_desc">Use device local TTS. Lower latency, voice quality depends on the device.</string>
+    <string name="server_audio">Server Audio (Slow)</string>
+    <string name="server_audio_desc">Wait for the server to synthesize audio. Higher quality but higher latency.</string>
     <string name="app_language">App Language</string>
     <string name="lang_vietnamese">Tiếng Việt</string>
     <string name="lang_english">English</string>

@@ -37,10 +37,10 @@
     <string name="connecting">Đang kết nối...</string>
     <string name="disconnected">Chưa kết nối</string>
     <string name="translation_tts_mode">Chế độ TTS khi dịch</string>
-    <string name="fast_translation">Dịch nhanh (TTS trên máy)</string>
-    <string name="fast_translation_desc">Dùng TTS có sẵn trên thiết bị. Phản hồi nhanh, chất lượng giọng tuỳ máy.</string>
-    <string name="slow_translation">Dịch chậm (audio từ server)</string>
-    <string name="slow_translation_desc">Chờ server tổng hợp audio. Chất lượng cao hơn, chậm hơn.</string>
+    <string name="offline_tts">TTS thiết bị (nhanh)</string>
+    <string name="offline_tts_desc">Dùng TTS có sẵn trên thiết bị. Phản hồi nhanh, chất lượng giọng tuỳ máy.</string>
+    <string name="server_audio">Audio server (chậm)</string>
+    <string name="server_audio_desc">Chờ server tổng hợp audio. Chất lượng cao hơn, chậm hơn.</string>
     <string name="app_language">Ngôn ngữ ứng dụng</string>
     <string name="lang_vietnamese">Tiếng Việt</string>
     <string name="lang_english">English</string>

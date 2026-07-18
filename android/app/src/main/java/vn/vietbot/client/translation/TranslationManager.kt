@@ -15,10 +15,11 @@ import java.util.UUID
 /**
  * TranslationManager - Handles offline TTS for translation playback
  *
- * When server sends translation messages with [TRANSLATION][xx-XX] prefix,
- * this manager parses them and uses Android's built-in TTS to speak.
+ * Supports two message types from server:
+ * 1. [TRANSLATION][xx-XX]<text> - Translated text (audio from server stream)
+ * 2. [TRANSLATION_ORIGINAL][xx-XX]<text> - Original user speech (audio via offline TTS)
  *
- * It maintains a queue of translation segments and highlights them as they're spoken.
+ * Queue-based, segments are spoken sequentially via Android's built-in TTS.
  */
 class TranslationManager(private val context: Context) {
 
@@ -26,8 +27,12 @@ class TranslationManager(private val context: Context) {
         private const val TAG = "TranslationManager"
 
         // Pattern to parse translation messages
-        // Format: [TRANSLATION]<translated_text> (no language code in prefix)
-        val TRANSLATION_PATTERN = Regex("^\\[TRANSLATION\\](.+)$")
+        // Format: [TRANSLATION][xx-XX]<translated_text>
+        val TRANSLATION_PATTERN = Regex("^\\[TRANSLATION\\]\\[([a-zA-Z-]+)\\](.+)$")
+
+        // 🔥 NEW: Pattern to parse original (user-spoken) text
+        // Format: [TRANSLATION_ORIGINAL][xx-XX]<original_text>
+        val TRANSLATION_ORIGINAL_PATTERN = Regex("^\\[TRANSLATION_ORIGINAL\\]\\[([a-zA-Z-]+)\\](.+)$")
     }
 
     // Translation segment data class
@@ -35,7 +40,9 @@ class TranslationManager(private val context: Context) {
         val id: String = UUID.randomUUID().toString(),
         val langCode: String,
         val text: String,
-        val isPlayed: Boolean = false
+        val isPlayed: Boolean = false,
+        // 🔥 NEW: Distinguish between translated and original text
+        val isOriginal: Boolean = false
     )
 
     // Queue of translation segments waiting to be spoken
@@ -81,7 +88,7 @@ class TranslationManager(private val context: Context) {
                         putInt(android.speech.tts.TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_VOICE_CALL)
                     }
                     tts?.setEngineByPackageName("com.google.android.tts") // Optional: prefer Google TTS
-                    tts?.setSpeechRate(1.0f)
+                    tts?.setSpeechRate(1.25f)
                     tts?.setPitch(1.0f)
                 } catch (e: Exception) {
                     Log.w(TAG, "TTS config failed: ${e.message}")
@@ -117,25 +124,41 @@ class TranslationManager(private val context: Context) {
 
     /**
      * Parse translation message and return TranslationData or null
+     * Handles BOTH [TRANSLATION] and [TRANSLATION_ORIGINAL] prefixes.
      */
     fun parseTranslationMessage(text: String): TranslationSegment? {
+        // Try ORIGINAL first (more specific)
+        val originalMatch = TRANSLATION_ORIGINAL_PATTERN.find(text)
+        if (originalMatch != null) {
+            return TranslationSegment(
+                langCode = originalMatch.groupValues[1].trim(),
+                text = originalMatch.groupValues[2].trim(),
+                isOriginal = true
+            )
+        }
+
+        // Try regular TRANSLATION
         val match = TRANSLATION_PATTERN.find(text) ?: return null
-
-        val translatedText = match.groupValues[1].trim()  // e.g., "Xin chào bạn khỏe không?"
-        // No lang code in prefix anymore — use default Vietnamese for translation mode
-        val langCode = "vi-VN"
-
         return TranslationSegment(
-            langCode = langCode,
-            text = translatedText
+            langCode = match.groupValues[1].trim(),
+            text = match.groupValues[2].trim(),
+            isOriginal = false
         )
     }
 
     /**
-     * Check if text is a translation message
+     * Check if text is a translation message (either translated or original)
      */
     fun isTranslationMessage(text: String): Boolean {
         return text.startsWith("[TRANSLATION]")
+    }
+
+    /**
+     * Check if text is specifically an ORIGINAL translation message
+     * (user-spoken text, not the translated version)
+     */
+    fun isOriginalTranslationMessage(text: String): Boolean {
+        return text.startsWith("[TRANSLATION_ORIGINAL]")
     }
 
     /**
@@ -144,7 +167,7 @@ class TranslationManager(private val context: Context) {
     fun addTranslation(text: String) {
         val segment = parseTranslationMessage(text) ?: return
 
-        Log.i(TAG, "Adding translation: lang=${segment.langCode}, text=${segment.text}")
+        Log.i(TAG, "Adding translation: lang=${segment.langCode}, isOriginal=${segment.isOriginal}, text=${segment.text}")
 
         // Mark translation mode as active
         _isTranslationMode.value = true
@@ -179,12 +202,12 @@ class TranslationManager(private val context: Context) {
     }
 
     /**
-     * Speak a specific segment.
+     * Speak a specific segment with dual-audio routing:
+     * - isOriginal (user's own language) → phone speaker
+     * - !isOriginal (foreign language) → Bluetooth speaker if connected, else phone speaker
      *
      * Pin the TTS voice on the FIRST segment so all subsequent segments in
-     * this session share the same voice. Without pinning, Android picks
-     * a voice per language each call which can yield a different voice for
-     * each segment (mismatched pitch/timbre/character).
+     * this session share the same voice.
      */
     private fun speakSegment(segment: TranslationSegment) {
         if (!isTtsInitialized) {
@@ -203,11 +226,7 @@ class TranslationManager(private val context: Context) {
                 Log.w(TAG, "Language not supported: ${segment.langCode}, falling back to default")
                 tts?.language = Locale.getDefault()
             }
-            // Pick the first available voice for this language and pin it
-            // so all future segments use the SAME voice. This is the fix
-            // for the "different voice every segment" issue.
             try {
-                // Wait for TTS to load voices for the new language, then select one
                 val voices = tts?.voices ?: return
                 val matchingVoices = voices.filter {
                     it.locale.language == locale.language ||
@@ -224,13 +243,58 @@ class TranslationManager(private val context: Context) {
             }
         }
 
-        // Speak with utterance ID = segment ID
-        // Use VOICE_CALL stream for better AEC on Samsung devices
+        // Route audio to correct speaker based on segment type
+        routeAudioForSegment(segment)
+
         val params = android.os.Bundle().apply {
             putInt(android.speech.tts.TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_VOICE_CALL)
         }
         tts?.speak(segment.text, TextToSpeech.QUEUE_FLUSH, params, segment.id)
-        Log.i(TAG, "Speaking: ${segment.text}")
+        Log.i(TAG, "Speaking [${if (segment.isOriginal) "ORIGINAL→BT/phone" else "TRANSLATED→phone"}]: ${segment.text}")
+    }
+
+    /**
+     * Route TTS audio to the correct speaker for the given segment.
+     * - Original (user's own language, e.g., vi-VN) → Bluetooth if connected, else phone speaker
+     * - Translated (customer's language, e.g., en-US) → ALWAYS phone speaker
+     */
+    private fun routeAudioForSegment(segment: TranslationSegment) {
+        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        if (segment.isOriginal) {
+            // User's own language → BT if connected, else phone speaker
+            val hasBluetooth = try {
+                @Suppress("DEPRECATION")
+                audioManager.isBluetoothScoOn || audioManager.isBluetoothA2dpOn
+            } catch (e: Exception) { false }
+
+            try {
+                if (hasBluetooth) {
+                    audioManager.isSpeakerphoneOn = false
+                    @Suppress("DEPRECATION")
+                    audioManager.startBluetoothSco()
+                    audioManager.setBluetoothScoOn(true)
+                    Log.d(TAG, "Audio routed to Bluetooth (original, user's lang)")
+                } else {
+                    audioManager.isSpeakerphoneOn = true
+                    audioManager.stopBluetoothSco()
+                    audioManager.setBluetoothScoOn(false)
+                    Log.d(TAG, "Audio routed to phone speaker (no BT, original)")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to route original audio: ${e.message}")
+            }
+        } else {
+            // Customer's language (translated) → ALWAYS phone speaker
+            try {
+                audioManager.isSpeakerphoneOn = true
+                audioManager.stopBluetoothSco()
+                audioManager.setBluetoothScoOn(false)
+                Log.d(TAG, "Audio routed to phone speaker (translated, customer)")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to route to phone speaker: ${e.message}")
+            }
+        }
     }
 
     /**
@@ -255,32 +319,67 @@ class TranslationManager(private val context: Context) {
     private fun getLocaleFromCode(langCode: String): Locale {
         return when (langCode) {
             "vi-VN" -> Locale("vi", "VN")
+            "vi" -> Locale("vi", "VN")
             "en-US" -> Locale.US
             "en-GB" -> Locale.UK
+            "en" -> Locale.US
             "ja-JP" -> Locale.JAPANESE
+            "ja" -> Locale.JAPANESE
             "ko-KR" -> Locale.KOREAN
+            "ko" -> Locale.KOREAN
             "zh-CN" -> Locale.CHINESE
             "zh-TW" -> Locale.TRADITIONAL_CHINESE
+            "zh" -> Locale.CHINESE
             "fr-FR" -> Locale.FRENCH
+            "fr" -> Locale.FRENCH
             "de-DE" -> Locale.GERMAN
+            "de" -> Locale.GERMAN
             "es-ES" -> Locale("es", "ES")
+            "es" -> Locale("es", "ES")
             "th-TH" -> Locale("th", "TH")
+            "th" -> Locale("th", "TH")
             "ru-RU" -> Locale("ru", "RU")
+            "ru" -> Locale("ru", "RU")
             "ar-XA" -> Locale("ar", "XA")
+            "ar" -> Locale("ar", "XA")
             "pt-BR" -> Locale("pt", "BR")
+            "pt" -> Locale("pt", "BR")
             "it-IT" -> Locale.ITALIAN
+            "it" -> Locale.ITALIAN
             "nl-NL" -> Locale("nl", "NL")
+            "nl" -> Locale("nl", "NL")
             "pl-PL" -> Locale("pl", "PL")
+            "pl" -> Locale("pl", "PL")
             "tr-TR" -> Locale("tr", "TR")
+            "tr" -> Locale("tr", "TR")
             "hi-IN" -> Locale("hi", "IN")
+            "hi" -> Locale("hi", "IN")
             "ms-MY" -> Locale("ms", "MY")
+            "ms" -> Locale("ms", "MY")
             "id-ID" -> Locale("id", "ID")
+            "id" -> Locale("id", "ID")
             else -> Locale.getDefault()
         }
     }
 
     /**
-     * Clear all translation segments
+     * Complete a translation batch — clear queue and reset speaking state
+     * but KEEP translation mode active and voice pinned.
+     * Called by onAllFinished when all segments in a turn are done.
+     * bot_mode=3: translation is always on, so we never exit mode here.
+     */
+    fun completeBatch() {
+        tts?.stop()
+        _translationQueue.value = emptyList()
+        _currentSpeakingId.value = null
+        // Keep _isTranslationMode = true (always on for bot_mode=3)
+        // Keep pinnedVoice (consistent voice across batches)
+        Log.i(TAG, "Translation batch completed (mode still active, voice pinned)")
+    }
+
+    /**
+     * Clear all translation segments and fully exit translation mode.
+     * Used on disconnect only.
      */
     fun clearQueue() {
         tts?.stop()

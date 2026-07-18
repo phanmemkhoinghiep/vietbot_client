@@ -89,15 +89,28 @@ class ChatViewMode @Inject constructor(
         translationManager.onSegmentStart = { _ ->
             // Mark the currently playing segment as played in the display
             schedule {
-                display.markTranslationSegmentPlayed(display.currentTranslation.value?.segments?.indexOfFirst { !it.isPlayed } ?: -1)
+                val display = display
+                val current = display.currentTranslation.value
+                if (current != null) {
+                    val idx = current.segments.indexOfFirst { !it.isPlayed }
+                    if (idx >= 0) display.markTranslationSegmentPlayed(idx)
+                }
+                // Also mark original translation segment
+                val origCurrent = display.currentOriginalTranslation.value
+                if (origCurrent != null) {
+                    val idx = origCurrent.segments.indexOfFirst { !it.isPlayed }
+                    if (idx >= 0) display.markOriginalTranslationSegmentPlayed(idx)
+                }
             }
         }
         translationManager.onAllFinished = {
-            // All translation segments have been spoken — exit translation mode
-            // so the input field becomes editable again.
+            // All segments in this turn have been spoken. With bot_mode=3,
+            // translation is ALWAYS on — don't exit translation mode here,
+            // just complete the display and ready for next batch.
             schedule {
                 display.completeTranslation()
-                translationManager.stop()
+                display.completeOriginalTranslation()
+                translationManager.completeBatch()
             }
         }
     }
@@ -107,6 +120,9 @@ class ChatViewMode @Inject constructor(
      * Called on connect, tts.start, and translation mode activation.
      */
     private fun ensureAudioPlayerActive() {
+        // OpusStreamPlayer ALWAYS plays server audio (phone speaker).
+        // During translation mode, both OpusStreamPlayer (server audio) and
+        // Android TTS (Bluetooth/phone) play simultaneously.
         if (player == null && protocol?.isAudioChannelOpened() == true) {
             viewModelScope.launch(Dispatchers.IO) {
                 val sampleRate = 24000
@@ -330,9 +346,10 @@ class ChatViewMode @Inject constructor(
     fun connect() {
         if (_isConnected.value || _isConnecting.value) return
 
-        // Add separator when reconnecting (there are existing messages)
-        if (display.chatFlow.value.isNotEmpty()) {
+        // Add separator when reconnecting (there are existing messages or active translation)
+        if (display.chatFlow.value.isNotEmpty() || display.currentTranslation.value != null) {
             display.clearHistoryWithSeparator()
+            display.clearCurrentTranslation()
         }
 
         viewModelScope.launch {
@@ -420,11 +437,28 @@ class ChatViewMode @Inject constructor(
                                             if (text.isNotEmpty()) {
                                                 Log.i(TAG, "<< $text")
 
-                                                // Check if this is a translation message with [TRANSLATION][xx-XX] prefix
-                                                if (translationManager.isTranslationMessage(text)) {
-                                                    // Route to TranslationManager for offline TTS and mode tracking
+                                                // Check if this is an ORIGINAL translation message [TRANSLATION_ORIGINAL][xx-XX]
+                                                // This is the user's original speech (e.g., Vietnamese when bot_language=vi)
+                                                // → Route to Android TTS (Bluetooth if connected, else phone)
+                                                // → Server audio (OpusStreamPlayer) keeps playing on phone speaker
+                                                if (translationManager.isOriginalTranslationMessage(text)) {
                                                     translationManager.addTranslation(text)
-                                                    // Also display the translation text in chat (without the prefix)
+                                                    // Display original text in chat (secondary bubble)
+                                                    val segment = translationManager.parseTranslationMessage(text)
+                                                    if (segment != null) {
+                                                        schedule {
+                                                            display.addOriginalTranslationSegment(segment.text)
+                                                        }
+                                                    }
+                                                }
+                                                // Check if this is a TRANSLATED message [TRANSLATION][xx-XX]
+                                                // This is the translated text (e.g., English when user spoke Vietnamese)
+                                                // → Route to Android TTS (Bluetooth if connected, else phone)
+                                                // → Server audio (OpusStreamPlayer) continues on phone speaker
+                                                // Both streams play simultaneously - no need to stop player
+                                                else if (translationManager.isTranslationMessage(text)) {
+                                                    translationManager.addTranslation(text)
+                                                    // Display translated text in chat
                                                     val segment = translationManager.parseTranslationMessage(text)
                                                     if (segment != null) {
                                                         schedule {
@@ -800,6 +834,11 @@ class Display {
     private val _currentTranslation = MutableStateFlow<TranslationDisplay?>(null)
     val currentTranslation: StateFlow<TranslationDisplay?> = _currentTranslation.asStateFlow()
 
+    // 🔥 NEW: Current ORIGINAL translation message (user-spoken language)
+    // Dual mode: 1 translated bubble + 1 original bubble below
+    private val _currentOriginalTranslation = MutableStateFlow<OriginalTranslationDisplay?>(null)
+    val currentOriginalTranslation: StateFlow<OriginalTranslationDisplay?> = _currentOriginalTranslation.asStateFlow()
+
     // Index of the currently active streaming bubble (STT or TTS), or -1 if none.
     // Used to update the same bubble in-place instead of appending a new one each time.
     private var _streamingIndex: Int = -1
@@ -981,6 +1020,54 @@ class Display {
     }
 
     /**
+     * 🔥 NEW: Add an ORIGINAL translation segment (user's spoken language, e.g., Vietnamese)
+     * These appear as a SECONDARY bubble BELOW the translated text bubble.
+     * Display: 1 translated bubble (top) + 1 original bubble (below)
+     */
+    fun addOriginalTranslationSegment(text: String) {
+        val current = _currentOriginalTranslation.value
+        if (current == null) {
+            // First segment - create new original translation display
+            _currentOriginalTranslation.value = OriginalTranslationDisplay(
+                segments = listOf(TranslationSegmentDisplay(text = text, isPlayed = false)),
+                isComplete = false
+            )
+        } else {
+            // Add segment to existing original translation
+            _currentOriginalTranslation.value = current.copy(
+                segments = current.segments + TranslationSegmentDisplay(text = text, isPlayed = false)
+            )
+        }
+    }
+
+    /**
+     * Mark original translation segment as played (by index)
+     */
+    fun markOriginalTranslationSegmentPlayed(index: Int) {
+        val current = _currentOriginalTranslation.value ?: return
+        if (index < current.segments.size) {
+            val updatedSegments = current.segments.toMutableList()
+            updatedSegments[index] = updatedSegments[index].copy(isPlayed = true)
+            _currentOriginalTranslation.value = current.copy(segments = updatedSegments)
+        }
+    }
+
+    /**
+     * Clear current original translation (when translation mode ends)
+     */
+    fun clearCurrentOriginalTranslation() {
+        _currentOriginalTranslation.value = null
+    }
+
+    /**
+     * Mark original translation as complete
+     */
+    fun completeOriginalTranslation() {
+        val current = _currentOriginalTranslation.value ?: return
+        _currentOriginalTranslation.value = current.copy(isComplete = true)
+    }
+
+    /**
      * Mark a translation segment as played (by index)
      */
     fun markTranslationSegmentPlayed(index: Int) {
@@ -1012,6 +1099,21 @@ class Display {
  * Translation display data for UI
  */
 data class TranslationDisplay(
+    val segments: List<TranslationSegmentDisplay>,
+    val isComplete: Boolean = false
+) {
+    val fullText: String
+        get() = segments.joinToString(" ") { it.text }
+
+    val playedText: String
+        get() = segments.filter { it.isPlayed }.joinToString(" ") { it.text }
+}
+
+/**
+ * 🔥 NEW: Original translation display data (user's spoken language)
+ * Dual mode shows translated bubble (top) + original bubble (below)
+ */
+data class OriginalTranslationDisplay(
     val segments: List<TranslationSegmentDisplay>,
     val isComplete: Boolean = false
 ) {
