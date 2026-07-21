@@ -115,19 +115,26 @@ object AudioDeviceSelector {
     /**
      * Find AudioDeviceInfo for a specific SpeakerOutput.
      *
-     * Simplified:
-     * - BUILTIN_SPEAKER → null (let OS pick whatever default: BT A2DP, glasses, phone speaker)
-     * - EARPIECE → pin to TYPE_BUILTIN_EARPIECE (phone receiver, force)
-     *
-     * Per user testing:
-     *   - BUILTIN_SPEAKER routes through whatever Android already chose (BT A2DP if connected, glasses if connected, else phone).
-     *   - EARPIECE forces receiver.
-     * No more "BLUETOOTH_A2DP" / "USB" / "GLASSES" options.
+     * - BUILTIN_SPEAKER ("Loa Bluetooth") → pin to BT A2DP if connected, else null (OS default = phone speaker).
+     *   MUST explicitly pin to BT A2DP because USAGE_VOICE_COMMUNICATION (used in OpusStreamPlayer)
+     *   defaults to earpiece/receiver, never A2DP. Without explicit pin, audio always comes out of
+     *   the phone receiver regardless of "Loa Bluetooth" setting.
+     * - EARPIECE ("Loa Điện thoại") → pin to TYPE_BUILTIN_EARPIECE (phone receiver, force).
      */
     fun findOutputDevice(context: Context, output: SpeakerOutput): AudioDeviceInfo? {
         val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         return when (output) {
-            SpeakerOutput.BUILTIN_SPEAKER -> null  // OS default (BT/glasses/phone auto-routed)
+            SpeakerOutput.BUILTIN_SPEAKER -> {
+                // Look for BT A2DP first (Bluetooth speaker/headset)
+                val a2dp = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+                    .firstOrNull { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP }
+                if (a2dp != null) {
+                    Log.i("AudioDeviceSelector", "BUILTIN_SPEAKER: pinning to BT A2DP ${a2dp.productName}")
+                    return a2dp
+                }
+                // No BT connected — return null so OS routes to default (phone speaker)
+                null
+            }
             SpeakerOutput.EARPIECE ->
                 am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
                     .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }

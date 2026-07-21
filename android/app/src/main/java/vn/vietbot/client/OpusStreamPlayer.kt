@@ -54,11 +54,10 @@ class OpusStreamPlayer(
         ) * 4 // Increase buffer size 4x for streaming headroom (was 2x - caused underflow)
 
         // Build AudioAttributes:
-        // - VOICE_COMMUNICATION for AEC compatibility (default — used for both
-        //   BUILTIN_SPEAKER and EARPIECE).
-        // - When the system already routes to external (BT A2DP/glasses etc.)
-        //   via BUILTIN_SPEAKER selection, VOICE_COMMUNICATION still works
-        //   because Android handles routing internally.
+        // - VOICE_COMMUNICATION for AEC compatibility.
+        // - For BUILTIN_SPEAKER (user selected "Loa Bluetooth"), we MUST explicitly
+        //   pin to BT A2DP via setPreferredDevice() because USAGE_VOICE_COMMUNICATION
+        //   defaults to the earpiece/receiver — never BT A2DP — without explicit pin.
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
@@ -83,9 +82,10 @@ class OpusStreamPlayer(
 
         audioTrack = builder.build()
 
-        // Apply setPreferredDevice() only when we have an explicit device
-        // (e.g. EARPIECE → force receiver). For BUILTIN_SPEAKER we leave OS to
-        // pick whatever is connected (BT A2DP, glasses, etc.) automatically.
+        // Apply setPreferredDevice() to enforce the user's speaker selection:
+        //   - BUILTIN_SPEAKER with BT A2DP connected → BT speaker (explicit pin required)
+        //   - BUILTIN_SPEAKER without BT → null → OS defaults to phone loudspeaker
+        //   - EARPIECE → force phone receiver
         if (preferredDevice != null && android.os.Build.VERSION.SDK_INT >= 23) {
             val setResult = audioTrack.setPreferredDevice(preferredDevice)
             Log.i(
@@ -96,7 +96,7 @@ class OpusStreamPlayer(
         } else {
             Log.i(
                 TAG,
-                "🎯 No preferred device (speakerOutput=$selectedOutput) → OS picks routed output automatically"
+                "🎯 No preferred device (speakerOutput=$selectedOutput) → OS defaults to phone loudspeaker"
             )
         }
 
