@@ -67,6 +67,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -1039,6 +1040,14 @@ fun SettingsContent(
                         text = stringResource(R.string.about_version),
                         style = MaterialTheme.typography.labelSmall,
                         color = TextMuted
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.about_changelog),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
                     )
                     Text(
                         text = stringResource(R.string.about_author),

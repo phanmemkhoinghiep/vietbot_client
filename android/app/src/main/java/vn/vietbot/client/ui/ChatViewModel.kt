@@ -79,7 +79,7 @@ class ChatViewMode @Inject constructor(
     val display = Display()
 
     // Translation manager for offline TTS playback
-    private val translationManager = TranslationManager(context)
+    private val translationManager = TranslationManager(context, settings)
 
     // Expose translation mode state for UI to disable text input
     val isTranslationMode: StateFlow<Boolean> = translationManager.isTranslationMode

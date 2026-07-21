@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
 import java.util.UUID
+import vn.vietbot.client.data.SettingsRepository
+import vn.vietbot.client.data.SpeakerOutput
 
 /**
  * TranslationManager - Handles offline TTS for translation playback.
@@ -23,9 +25,16 @@ import java.util.UUID
  * The user's choice between server audio vs offline TTS is stored in
  * SettingsRepository.useOfflineTts. This manager ONLY runs when offline TTS is selected.
  *
+ * Speaker routing respects SettingsRepository.speakerOutput:
+ *  - BUILTIN_SPEAKER ("Loa Bluetooth") → BT SCO if connected, else phone loudspeaker
+ *  - EARPIECE ("Loa Điện thoại") → force phone receiver (earpiece)
+ *
  * Queue-based: segments are spoken sequentially via Android's built-in TTS.
  */
-class TranslationManager(private val context: Context) {
+class TranslationManager(
+    private val context: Context,
+    private val settings: SettingsRepository
+) {
 
     companion object {
         private const val TAG = "TranslationManager"
@@ -165,6 +174,56 @@ class TranslationManager(private val context: Context) {
         speakSegment(nextSegment)
     }
 
+    /**
+     * Route TTS audio to the correct output device based on SettingsRepository.speakerOutput.
+     *
+     * BUILTIN_SPEAKER ("Loa Bluetooth"):
+     *   - If BT is connected → start Bluetooth SCO so TTS audio goes to BT headset/speaker
+     *   - If no BT → enable speakerphone (phone loudspeaker)
+     *
+     * EARPIECE ("Loa Điện thoại"):
+     *   - Disable speakerphone → forces audio to earpiece/receiver
+     *   - Stop BT SCO if it was started
+     *
+     * Note: Android TTS routes audio through AudioManager stream settings.
+     * setSpeakerphoneOn() affects STREAM_VOICE_CALL (which TTS uses via KEY_PARAM_STREAM).
+     * BT SCO routes both voice call and TTS audio to the Bluetooth headset.
+     */
+    private fun applySpeakerRouting() {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        when (settings.speakerOutput) {
+            SpeakerOutput.BUILTIN_SPEAKER -> {
+                // Check if any Bluetooth audio device is connected
+                val hasBtAudio = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
+                    it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                    it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                }
+                if (hasBtAudio) {
+                    // Route to Bluetooth — start SCO for TTS audio
+                    if (!am.isBluetoothScoOn) {
+                        am.startBluetoothSco()
+                        am.isBluetoothScoOn = true
+                        Log.i(TAG, "BT connected — started Bluetooth SCO for TTS")
+                    }
+                    am.isSpeakerphoneOn = false
+                } else {
+                    // No BT — use phone loudspeaker
+                    am.isSpeakerphoneOn = true
+                    Log.i(TAG, "No BT — TTS → phone loudspeaker")
+                }
+            }
+            SpeakerOutput.EARPIECE -> {
+                // Force earpiece (phone receiver)
+                am.isSpeakerphoneOn = false
+                if (am.isBluetoothScoOn) {
+                    am.stopBluetoothSco()
+                    am.isBluetoothScoOn = false
+                }
+                Log.i(TAG, "TTS → earpiece (phone receiver)")
+            }
+        }
+    }
+
     private fun speakSegment(segment: TranslationSegment) {
         if (!isTtsInitialized) {
             Log.e(TAG, "TTS not initialized")
@@ -173,6 +232,9 @@ class TranslationManager(private val context: Context) {
 
         _currentSpeakingId.value = segment.id
         onSegmentStart?.invoke(segment.id)
+
+        // Apply speaker routing based on user's speakerOutput setting
+        applySpeakerRouting()
 
         if (pinnedVoice == null) {
             val locale = getLocaleFromCode(segment.langCode)
@@ -273,6 +335,14 @@ class TranslationManager(private val context: Context) {
 
     fun clearQueue() {
         tts?.stop()
+        // Clean up BT SCO if we started it
+        try {
+            val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            if (am.isBluetoothScoOn) {
+                am.stopBluetoothSco()
+                am.isBluetoothScoOn = false
+            }
+        } catch (_: Exception) {}
         _translationQueue.value = emptyList()
         _currentSpeakingId.value = null
         _isTranslationMode.value = false

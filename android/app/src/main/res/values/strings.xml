@@ -48,7 +48,8 @@
     <string name="nav_about">About Vietbot</string>
     <string name="about_title">About Vietbot</string>
     <string name="about_subtitle">New Generation Vietnamese AI Voice Assistant</string>
-    <string name="about_version">Version: v2.5.0 (2026)</string>
+    <string name="about_version">Version: v2.6.0 (2026)</string>
+    <string name="about_changelog">What\'s new in v2.6.0:\n• Translation mode audio isolation — server audio and offline TTS play one at a time\n• Bluetooth speaker routing for both server audio (OpusStreamPlayer) and offline Android TTS\n• New setting: choose between device TTS (fast) and server audio (slow) for translation playback\n• Speaker output selection — route to Bluetooth or phone earpiece\n• Microphone source selection — phone mic or Bluetooth SCO\n• Session separator on reconnect in translation mode\n• Bug fixes: dual-audio issue in translation mode, Bluetooth A2DP routing for OpusStreamPlayer</string>
     <string name="about_author">Author: Thế Anh</string>
     <string name="about_phone">Phone: +84 938 388 286</string>
     <string name="about_github">GitHub: github.com/phanmemkhoinghiep</string>

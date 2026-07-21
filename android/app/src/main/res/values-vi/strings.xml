@@ -47,7 +47,8 @@
     <string name="nav_about">Về Vietbot</string>
     <string name="about_title">Về Vietbot</string>
     <string name="about_subtitle">AI Voice Assistant Tiếng Việt Thế Hệ Mới</string>
-    <string name="about_version">Phiên bản: v2.5.0 (2026)</string>
+    <string name="about_version">Phiên bản: v2.6.0 (2026)</string>
+    <string name="about_changelog">Có gì mới trong v2.6.0:\n• Chế độ dịch tách âm thanh — audio server và TTS offline chỉ phát cùng lúc 1 loại\n• Hỗ trợ loa Bluetooth cho cả audio server (OpusStreamPlayer) và TTS offline\n• Cài đặt mới: chọn TTS thiết bị (nhanh) hoặc audio server (chậm) khi dịch\n• Chọn đầu ra loa — Bluetooth hoặc loa thoại\n• Chọn nguồn mic — mic điện thoại hoặc Bluetooth SCO\n• Vạch ngăn phiên khi kết nối lại ở chế độ dịch\n• Sửa lỗi: phát 2 loại audio cùng lúc trong chế độ dịch, định tuyến Bluetooth A2DP cho OpusStreamPlayer</string>
     <string name="about_author">Người lập trình: Thế Anh</string>
     <string name="about_phone">Điện thoại: +84 938 388 286</string>
     <string name="about_github">GitHub: github.com/phanmemkhoinghiep</string>
