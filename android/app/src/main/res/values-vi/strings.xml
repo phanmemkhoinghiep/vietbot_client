@@ -36,7 +36,7 @@
     <string name="connected">Đã kết nối</string>
     <string name="connecting">Đang kết nối...</string>
     <string name="disconnected">Chưa kết nối</string>
-    <string name="translation_tts_mode">Chế độ TTS khi dịch</string>
+    <string name="translation_tts_mode">Âm thanh khi dịch</string>
     <string name="offline_tts">TTS thiết bị (nhanh)</string>
     <string name="offline_tts_desc">Dùng TTS có sẵn trên thiết bị. Phản hồi nhanh, chất lượng giọng tuỳ máy.</string>
     <string name="server_audio">Audio server (chậm)</string>

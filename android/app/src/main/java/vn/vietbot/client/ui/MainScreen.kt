@@ -616,6 +616,7 @@ fun SettingsContent(
     var appLanguage by remember { mutableStateOf(settingsRepository.appLanguage) }
     var micSource by remember { mutableStateOf(settingsRepository.micSource) }
     var speakerOutput by remember { mutableStateOf(settingsRepository.speakerOutput) }
+    var useOfflineTts by remember { mutableStateOf(settingsRepository.useOfflineTts) }
 
     // Helper to apply audio device change — must rebuild OpusStreamPlayer (captures
     // AudioDeviceInfo in init {} and cannot be re-routed after creation).
@@ -717,6 +718,64 @@ fun SettingsContent(
                 isEnabledProvider = { source ->
                     source != CameraSource.GLASSES || isGlassesConnected
                 }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Translation TTS Mode Section
+        NeonSettingsSection(title = stringResource(R.string.translation_tts_mode)) {
+            val options = listOf(true, false) // true = offline TTS, false = server audio
+            val labelOffline = stringResource(R.string.offline_tts)
+            val labelServer = stringResource(R.string.server_audio)
+            val descOffline = stringResource(R.string.offline_tts_desc)
+            val descServer = stringResource(R.string.server_audio_desc)
+
+            DeviceDropdownSection(
+                options = options,
+                selectedValue = useOfflineTts,
+                onValueChange = { newValue ->
+                    useOfflineTts = newValue
+                    settingsRepository.useOfflineTts = newValue
+                },
+                labelProvider = { value ->
+                    if (value) labelOffline else labelServer
+                },
+                descriptionProvider = { value ->
+                    if (value) descOffline else descServer
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Speaker Output Section
+        NeonSettingsSection(title = stringResource(R.string.speaker_output)) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val availableSpeakers = AudioDeviceSelector.getAvailableSpeakerOutputs(context, isGlassesConnected)
+            val effectiveSpeaker = if (availableSpeakers.contains(speakerOutput)) speakerOutput else (availableSpeakers.firstOrNull() ?: SpeakerOutput.BUILTIN_SPEAKER)
+
+            val labelBuiltInSpeaker = stringResource(R.string.speaker_builtin)
+            val labelEarpiece = stringResource(R.string.speaker_earpiece)
+
+            DeviceDropdownSection(
+                options = availableSpeakers,
+                selectedValue = effectiveSpeaker,
+                onValueChange = { newOutput ->
+                    Log.i("SettingsContent", "🔀 Speaker dropdown onValueChange: $speakerOutput → $newOutput")
+                    if (availableSpeakers.contains(newOutput)) {
+                        speakerOutput = newOutput
+                        settingsRepository.speakerOutput = newOutput
+                        applyAudioDeviceChange()
+                    }
+                },
+                labelProvider = { output ->
+                    when (output) {
+                        SpeakerOutput.BUILTIN_SPEAKER -> labelBuiltInSpeaker
+                        SpeakerOutput.EARPIECE -> labelEarpiece
+                    }
+                },
+                isEnabledProvider = { _ -> true }
             )
         }
 

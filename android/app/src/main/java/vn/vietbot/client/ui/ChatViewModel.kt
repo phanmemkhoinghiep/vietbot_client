@@ -120,9 +120,12 @@ class ChatViewMode @Inject constructor(
      * Called on connect, tts.start, and translation mode activation.
      */
     private fun ensureAudioPlayerActive() {
-        // OpusStreamPlayer ALWAYS plays server audio (phone speaker).
-        // During translation mode, both OpusStreamPlayer (server audio) and
-        // Android TTS (Bluetooth/phone) play simultaneously.
+        // When user selected offline TTS → skip server audio entirely (OpusStreamPlayer).
+        // Only play server audio when useOfflineTts=false.
+        if (settings.useOfflineTts) {
+            Log.d(TAG, "ensureAudioPlayerActive: skipped — offline TTS selected, no server audio")
+            return
+        }
         if (player == null && protocol?.isAudioChannelOpened() == true) {
             viewModelScope.launch(Dispatchers.IO) {
                 val sampleRate = 24000
@@ -146,6 +149,11 @@ class ChatViewMode @Inject constructor(
         Log.i(TAG, "🔄 restartAudioForDeviceChange called (audioChannelOpen=${proto.isAudioChannelOpened()})")
         if (!proto.isAudioChannelOpened()) {
             Log.i(TAG, "Audio channel not open — skipping player restart")
+            return
+        }
+        // When offline TTS is selected, don't rebuild OpusStreamPlayer
+        if (settings.useOfflineTts) {
+            Log.i(TAG, "Offline TTS selected — skipping OpusStreamPlayer rebuild")
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -419,7 +427,9 @@ class ChatViewMode @Inject constructor(
                                             schedule {
                                                 if (deviceState == DeviceState.SPEAKING) {
                                                     Log.i(TAG, "waiting for TTS to stop")
-                                                    player?.waitForPlaybackCompletion()
+                                                    if (!settings.useOfflineTts) {
+                                                        player?.waitForPlaybackCompletion()
+                                                    }
                                                     Log.i(TAG, "TTS stopped")
                                                     if (keepListening) {
                                                         protocol?.sendStartListening(ListeningMode.AUTO_STOP)
@@ -437,32 +447,20 @@ class ChatViewMode @Inject constructor(
                                             if (text.isNotEmpty()) {
                                                 Log.i(TAG, "<< $text")
 
-                                                // Check if this is an ORIGINAL translation message [TRANSLATION_ORIGINAL][xx-XX]
-                                                // This is the user's original speech (e.g., Vietnamese when bot_language=vi)
-                                                // → Route to Android TTS (Bluetooth if connected, else phone)
-                                                // → Server audio (OpusStreamPlayer) keeps playing on phone speaker
-                                                if (translationManager.isOriginalTranslationMessage(text)) {
-                                                    translationManager.addTranslation(text)
-                                                    // Display original text in chat (secondary bubble)
+                                                // [TRANSLATION][xx-XX]<text> — translated text from server
+                                                // Two playback options based on user setting:
+                                                //   useOfflineTts=true  → Android TTS offline (en-US @ 1.2x)
+                                                //   useOfflineTts=false → server audio stream (OpusStreamPlayer) handles audio
+                                                if (translationManager.isTranslationMessage(text)) {
                                                     val segment = translationManager.parseTranslationMessage(text)
                                                     if (segment != null) {
-                                                        schedule {
-                                                            display.addOriginalTranslationSegment(segment.text)
-                                                        }
-                                                    }
-                                                }
-                                                // Check if this is a TRANSLATED message [TRANSLATION][xx-XX]
-                                                // This is the translated text (e.g., English when user spoke Vietnamese)
-                                                // → Route to Android TTS (Bluetooth if connected, else phone)
-                                                // → Server audio (OpusStreamPlayer) continues on phone speaker
-                                                // Both streams play simultaneously - no need to stop player
-                                                else if (translationManager.isTranslationMessage(text)) {
-                                                    translationManager.addTranslation(text)
-                                                    // Display translated text in chat
-                                                    val segment = translationManager.parseTranslationMessage(text)
-                                                    if (segment != null) {
+                                                        // Always display the translated text
                                                         schedule {
                                                             display.addTranslationSegment(segment.text)
+                                                        }
+                                                        // Play audio via offline TTS only if user chose that option
+                                                        if (settings.useOfflineTts) {
+                                                            translationManager.addTranslation(text)
                                                         }
                                                     }
                                                 } else {
@@ -558,14 +556,19 @@ class ChatViewMode @Inject constructor(
 
                 if (protocol?.openAudioChannel() == true) {
                     protocol?.sendStartListening(ListeningMode.AUTO_STOP)
-                    withContext(Dispatchers.IO) {
-                        launch {
-                            val sampleRate = 24000
-                            val channels = 1
-                            val frameSizeMs = 60
-                            player = OpusStreamPlayer(sampleRate, channels, frameSizeMs, settings, context)
-                            player?.start(protocol!!.incomingAudioFlow)
+                    // Only start OpusStreamPlayer when server audio is selected
+                    if (!settings.useOfflineTts) {
+                        withContext(Dispatchers.IO) {
+                            launch {
+                                val sampleRate = 24000
+                                val channels = 1
+                                val frameSizeMs = 60
+                                player = OpusStreamPlayer(sampleRate, channels, frameSizeMs, settings, context)
+                                player?.start(protocol!!.incomingAudioFlow)
+                            }
                         }
+                    } else {
+                        Log.i(TAG, "Offline TTS selected — skipping OpusStreamPlayer on connect")
                     }
                 } else {
                     Log.e("WS", "Failed to open audio channel")

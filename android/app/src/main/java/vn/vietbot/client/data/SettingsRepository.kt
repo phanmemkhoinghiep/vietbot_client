@@ -43,6 +43,9 @@ interface SettingsRepository {
     var speakerOutput: SpeakerOutput
     val speakerOutputFlow: StateFlow<SpeakerOutput>
 
+    // Translation TTS mode: true = offline Android TTS, false = server audio stream
+    var useOfflineTts: Boolean
+
     // App language override: "vi", "en", or "" (follow system)
     var appLanguage: String
 
@@ -81,6 +84,7 @@ class SettingsRepositoryImpl @Inject constructor(
         private const val KEY_CAMERA_SOURCE = "camera_source"
         private const val KEY_MIC_SOURCE = "mic_source"
         private const val KEY_SPEAKER_OUTPUT = "speaker_output"
+        private const val KEY_USE_OFFLINE_TTS = "use_offline_tts"
         private const val KEY_APP_LANGUAGE = "app_language"
         private const val KEY_GLASSES_ADDRESS = "glasses_address"
         private const val KEY_GLASSES_NAME = "glasses_name"
@@ -200,6 +204,11 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs.edit().putString(KEY_SPEAKER_OUTPUT, value.name).apply()
             _speakerOutputFlow.value = value
         }
+
+    // Translation TTS mode: true = offline Android TTS (fast), false = server audio stream (slow)
+    override var useOfflineTts: Boolean
+        get() = prefs.getBoolean(KEY_USE_OFFLINE_TTS, true)
+        set(value) { prefs.edit().putBoolean(KEY_USE_OFFLINE_TTS, value).apply() }
 
     override var appLanguage: String
         get() = prefs.getString(KEY_APP_LANGUAGE, "") ?: ""
