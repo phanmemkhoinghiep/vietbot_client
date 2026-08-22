@@ -1,6 +1,6 @@
 # VietBot Live Widget — JavaScript Embed for 3rd-Party Sites
 
-## Quick Start
+## Quick Start (CDN — Recommended)
 
 Add this script tag to any page on your site:
 
@@ -10,9 +10,36 @@ Add this script tag to any page on your site:
 
 A floating chat button appears at the bottom-right of the page. Click to open the chat iframe.
 
+**Why CDN?**
+- **Auto-updated** — fixes & features pushed to GitHub automatically appear
+- **Global CDN** — fast load times worldwide (jsDelivr serves from edge)
+- **No maintenance** — you don't need to sync updates
+
 **Requirements:**
 - Your site must be served over HTTPS (required for microphone access)
 - Users must register an agent + bind a device at [web.vietbot.vn](https://web.vietbot.vn) or [mobile.vietbot.vn](https://mobile.vietbot.vn) before the widget activates
+
+---
+
+## Quick Start (Local Download — Self-hosted)
+
+You can download `widget.js` and host it locally:
+
+```bash
+curl -o your-site/js/widget.js https://cdn.jsdelivr.net/gh/phanmemkhoinghiep/vietbot_client@main/JS/widget.js
+```
+
+Then include from your server:
+
+```html
+<script src="/js/widget.js"></script>
+```
+
+**Important notes for local hosting:**
+
+1. **No auto-updates** — you must re-download `widget.js` manually when we push changes to GitHub.
+2. **Widget still loads from live.vietbot.vn internally** — the iframe inside the widget loads `https://live.vietbot.vn/embeddable_bot.html`. This domain cannot be changed (it's hardcoded in the widget and requires the same origin on live.vietbot.vn).
+3. **Same security model applies** — users still must bind devices at web.vietbot.vn or mobile.vietbot.vn.
 
 ---
 
@@ -38,13 +65,14 @@ Configure the widget before loading by setting `window.VIETBOT_WIDGET_CONFIG`:
 <script>
   window.VIETBOT_WIDGET_CONFIG = {
     position: 'bottom-left',   // 'bottom-right' (default) | 'bottom-left'
-    buttonColor: '#ff6b6b',    // button accent color (currently fixed to blue, future support)
     width: '400px',            // iframe width (default: 380px)
     height: '600px'            // iframe height (default: 560px)
   };
 </script>
 <script src="https://cdn.jsdelivr.net/gh/phanmemkhoinghiep/vietbot_client@main/JS/widget.js"></script>
 ```
+
+**Note:** `buttonColor` is no longer listed — the button color is currently fixed to blue (`#1f6feb`). Color customization may be added in a future update.
 
 ---
 
@@ -53,6 +81,27 @@ Configure the widget before loading by setting `window.VIETBOT_WIDGET_CONFIG`:
 | File | Description |
 |------|-------------|
 | `widget.js` | Widget loader — inject into 3rd-party pages |
+
+---
+
+## Download / Local Hosting FAQ
+
+### Q: Can I download `widget.js` and host it locally on my website?
+Yes. Download the file:
+
+```bash
+curl -o js/widget.js https://cdn.jsdelivr.net/gh/phanmemkhoinghiep/vietbot_client@main/JS/widget.js
+```
+
+Then include locally:
+```html
+<script src="/js/widget.js"></script>
+```
+
+**Important:**
+- `widget.js` is a lightweight loader — it only injects a button + iframe into your page
+- The iframe inside loads `https://live.vietbot.vn/embeddable_bot.html` — this is a **fixed URL** on live.vietbot.vn and cannot be changed
+- All communication (WebSocket, API) happens through live.vietbot.vn — your site never touches our backend directly
 
 ---
 
