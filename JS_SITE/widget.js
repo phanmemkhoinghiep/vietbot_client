@@ -28,23 +28,26 @@
     // ============================================================
     // ⬇️⬇️⬇️ ADMIN: Paste WS endpoint token ở đây ⬇️⬇️⬇️
     // Ví dụ: const SITE_WS_ENDPOINT = 'abc123...xyz=';
-    const SITE_WS_ENDPOINT = '__SITE_WS_ENDPOINT__';
+    // Hỗ trợ config qua window.VIETBOT_SITE_CONFIG hoặc window.SITE_WS_ENDPOINT
+    const EXTERNAL_CONFIG = window.VIETBOT_SITE_CONFIG || {};
+    const EXTERNAL_ENDPOINT = window.SITE_WS_ENDPOINT || '';
+    const SITE_WS_ENDPOINT = EXTERNAL_ENDPOINT || '__SITE_WS_ENDPOINT__';
     // ⬆️⬆️⬆️ ADMIN: Paste WS endpoint token ở đây ⬆️⬆️⬆️
     // ============================================================
 
     if (SITE_WS_ENDPOINT === '__SITE_WS_ENDPOINT__') {
         console.error(
             '[VietBot Widget] SITE_WS_ENDPOINT chưa được cấu hình. ' +
-            'Mở file widget.js → paste endpoint token vào placeholder.'
+            'Set window.SITE_WS_ENDPOINT trước khi load widget.js, hoặc paste token vào file này.'
         );
     }
 
     const CONFIG = {
         botUrl: 'https://live.vietbot.vn/embeddable_bot.html',
         siteEndpoint: SITE_WS_ENDPOINT,
-        width: '380px',
-        height: '560px',
-        position: 'bottom-right',
+        width: EXTERNAL_CONFIG.width || '380px',
+        height: EXTERNAL_CONFIG.height || '560px',
+        position: EXTERNAL_CONFIG.position || 'bottom-right',
     };
 
     if (document.getElementById('vietbot-widget-container')) return;
