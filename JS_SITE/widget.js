@@ -1,26 +1,26 @@
 /**
  * VietBot Site Widget — SITE-BOUND (cho admin nhúng vào web của họ)
  *
- * ⚠️ Workflow cho admin:
+ * ⚠️ Workflow cho admin (NEW flow - self-contained token):
  *   1. Đăng ký agent tại web.vietbot.vn
- *   2. Lấy WS endpoint token từ manager-web / MCP Access Point UI
- *   3. Mở file widget.js này → paste token vào dòng bên dưới (thay __SITE_WS_ENDPOINT__)
- *   4. Upload file widget.js đã sửa lên hosting của website admin
- *   5. Trong HTML website admin, thêm:
+ *   2. Vào live.vietbot.vn → tạo thiết bị web mới → lấy mã 6 số (bind code)
+ *   3. Vào web.vietbot.vn → nhập mã 6 số để bind thiết bị web với Agent
+ *   4. Vào partner.vietbot.vn → nhập MAC Address thiết bị web + Whitelist domains
+ *   5. Hệ thống sinh token (AES-ECB encoded mac_address + whitelist)
+ *   6. Copy token → paste vào dòng bên dưới (thay __SITE_WS_ENDPOINT__)
+ *   7. Upload file widget.js đã sửa lên hosting của website admin
+ *   8. Trong HTML website admin, thêm:
  *      <script src="/path/to/widget.js"></script>
  *
- * 🔒 Bảo mật:
- *   - Backend sẽ check Origin domain khớp với allowed_domains whitelist
- *   - Admin NÊN set whitelist qua API:
- *     POST /api/agent/{agent_id}/site-domains
- *     Body: {"domains": ["example.com", "www.example.com"]}
- *   - Hỗ trợ wildcard:
- *     - "example.com" — chỉ match example.com
- *     - "*.example.com" — match sub.example.com VÀ example.com
- *     - "*" — cho phép tất cả (KHÔNG AN TOÀN)
- *   - Nếu admin chưa set whitelist → bot sẽ chạy ở mọi domain (KHÔNG AN TOÀN)
+ * 🔒 Bảo mật (NEW):
+ *   - Token TỰ CHỨA whitelist (không cần lưu DB, không thể sửa đổi)
+ *   - Backend decrypt token → lấy mac_address + whitelist ngay lập tức
+ *   - Check Origin domain của visitor vs whitelist từ token
+ *   - Không match → 403 Forbidden, bot KHÔNG bao giờ chạy
+ *   - Whitelist được mã hóa AES-ECB + secret key chỉ VietBot backend biết
+ *   - Hỗ trợ wildcard: "example.com", "*.example.com", "*"
  *
- * Visitor KHÔNG cần đăng ký — bot dùng config của admin.
+ * Visitor KHÔNG cần đăng ký — bot dùng config của admin từ Java Manager API.
  */
 (function () {
     'use strict';

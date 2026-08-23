@@ -2,8 +2,8 @@
 
 Widget cho phép admin (chủ sở hữu agent VietBot) nhúng trợ lý ảo AI vào bất kỳ website nào mà **không yêu cầu visitor phải đăng ký tài khoản**. Bot dùng config (prompt, voice, language) của admin.
 
-> **Khác biệt với `JS/widget.js`:**  
-> - `JS/widget.js` — Widget cho **visitor đã đăng ký** (cần bind device trước)  
+> **Khác biệt với `JS/widget.js`:**
+> - `JS/widget.js` — Widget cho **visitor đã đăng ký** (cần bind device trước)
 > - `JS_SITE/widget.js` — Widget cho **visitor ẩn danh** (dùng config của admin, không cần đăng ký)
 
 ---
@@ -23,29 +23,43 @@ Widget cho phép admin (chủ sở hữu agent VietBot) nhúng trợ lý ảo AI
 
 ## Tổng quan
 
-Widget hoạt động theo flow:
+Widget hoạt động theo flow **MAC-bound site-endpoint**:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  1. Admin tạo agent tại web.vietbot.vn                       │
-│  2. Admin lấy "site-endpoint token" từ MCP Access Point UI  │
-│  3. Admin paste token vào widget.js                          │
-│  4. Admin upload widget.js lên hosting của họ                │
-│  5. Admin nhúng <script src="widget.js"></script> vào HTML   │
-└─────────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────┐
-│  6. Visitor mở website                                       │
-│  7. Widget inject floating button + iframe                    │
-│  8. Visitor click button → iframe mở                         │
-│  9. Iframe load embeddable_bot.html?site-endpoint=...        │
-│ 10. WebSocket connect tới live.vietbot.vn/ws                 │
-│ 11. Server decrypt token → agent_id                          │
-│ 12. Server check Origin domain vs whitelist                  │
-│ 13. Bot pipeline start (Gemini Live)                          │
-│ 14. Visitor nói → bot trả lời bằng voice + text              │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  SETUP (admin) - 1 lần                                           │
+│  1. Admin tạo agent tại web.vietbot.vn                            │
+│  2. Admin vào live.vietbot.vn → tạo thiết bị web mới              │
+│     → nhận mã 6 số (bind code)                                   │
+│  3. Admin vào web.vietbot.vn → nhập mã 6 số                       │
+│     → thiết bị web được bind với Agent                            │
+│  4. Admin copy MAC address của thiết bị web                        │
+│     (ví dụ: 00:1A:2B:3C:4D:5E)                                   │
+│  5. Admin vào partner.vietbot.vn → paste MAC + whitelist domain   │
+│  6. Hệ thống sinh token (AES-ECB encoded MAC + whitelist)        │
+│  7. Admin paste token vào widget.js → upload lên hosting           │
+│  8. Admin nhúng <script src="/widget.js"></script> vào HTML       │
+└──────────────────────────────────────────────────────────────────┘
+                                ↓
+┌──────────────────────────────────────────────────────────────────┐
+│  RUNTIME (visitor mở website)                                    │
+│  9.  Visitor mở website → widget inject floating button + iframe  │
+│  10. Visitor click button → iframe mở                             │
+│  11. Iframe load embeddable_bot.html?site-endpoint=<token>        │
+│  12. JS mở WebSocket tới wss://live.vietbot.vn/ws                 │
+│  13. Server decrypt AES-ECB token → MAC + whitelist (no DB!)      │
+│  14. Server check Origin vs whitelist (token tự chứa)             │
+│  15. Nếu OK → server query Java Manager API                       │
+│      POST /config/agent-models với macAddress                     │
+│      → response trả về full agent config (prompt, voice, …)      │
+│  16. Bot pipeline start (Gemini Live) với config đúng             │
+│  17. Visitor nói → bot trả lời bằng voice + text                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
+
+### Tại sao dùng MAC thay vì Agent ID?
+
+Java Manager API endpoint `GET /agent/{id}` yêu cầu user JWT (oauth2 filter), không chấp nhận server secret Bearer token. Trong khi `POST /config/agent-models` (với `macAddress`) **chấp nhận** server secret Bearer và trả về toàn bộ agent config (kèm `agent_id`). Vì vậy flow buộc phải có **bước bind thiết bị web với agent** trước khi generate token.
 
 ---
 
@@ -53,8 +67,8 @@ Widget hoạt động theo flow:
 
 ### Phía admin
 - Tài khoản VietBot tại [web.vietbot.vn](https://web.vietbot.vn)
-- Đã tạo ít nhất 1 agent
-- Domain whitelist đã được set (khuyến nghị cho bảo mật)
+- Đã tạo ít nhất 1 agent (trong Bước 1 bên dưới)
+- Đã bind thiết bị web với agent (xem Bước 2-3 bên dưới) → có MAC address
 - Website của admin phải được serve qua **HTTPS** (bắt buộc để dùng microphone)
 
 ### Phía visitor
@@ -66,15 +80,45 @@ Widget hoạt động theo flow:
 
 ## Hướng dẫn tích hợp
 
-### Bước 1: Lấy site-endpoint token
+### Bước 1: Tạo agent tại web.vietbot.vn
 
 1. Đăng nhập vào [web.vietbot.vn](https://web.vietbot.vn)
-2. Vào **MCP Access Point** (hoặc Manager Web UI)
-3. Chọn agent bạn muốn nhúng
-4. Click **"Generate Site Endpoint"**
-5. Copy token (chuỗi base64 dài ~64 ký tự, ví dụ: `h7sDRjDHWLuxO9HOFH0wulRVsaRdHeH865Uy13UJ9FFL/r/eBojzxlKMIUgV+6Cl`)
+2. Tạo agent mới (đặt tên, chọn voice, language, prompt, role)
+3. Ghi nhớ **Agent ID** (UUID 32 ký tự, ví dụ: `f2606e842ce1479eaca805b0fb62ca03`)
 
-### Bước 2: Cấu hình widget
+### Bước 2: Lấy mã 6 số từ live.vietbot.vn
+
+1. Mở [https://live.vietbot.vn](https://live.vietbot.vn) → đăng nhập (Firebase Auth)
+2. Trong giao diện thiết bị → click **"Thêm thiết bị mới"**
+3. Hệ thống sinh **mã 6 số** (bind code, ví dụ: `482931`) — mã này có hiệu lực trong vài phút
+
+### Bước 3: Bind thiết bị web với Agent tại web.vietbot.vn
+
+1. Quay lại [https://web.vietbot.vn](https://web.vietbot.vn)
+2. Vào **Quản lý thiết bị** → nhập **mã 6 số** từ Bước 2
+3. Chọn **Agent** muốn gán cho thiết bị web này (chính là agent ở Bước 1)
+4. Submit → thiết bị giờ đã liên kết với agent
+5. **Copy MAC address** của thiết bị web (ví dụ: `00:1A:2B:3C:4D:5E`)
+
+### Bước 4: Sinh site-bound token tại partner.vietbot.vn
+
+1. Mở [partner.vietbot.vn](https://partner.vietbot.vn)
+2. Paste **MAC Address** từ Bước 3
+3. Nhập **Whitelist Domains** (mỗi domain 1 dòng):
+   ```
+   example.com
+   www.example.com
+   *.example.com
+   ```
+   - `example.com` — chỉ match chính xác
+   - `*.example.com` — match `example.com` và tất cả subdomain
+   - `*` — cho phép mọi domain (KHÔNG AN TOÀN)
+4. Click **"Generate Token"**
+5. Copy token (chuỗi base64 dài, ví dụ: `bUEx04bA8jmGT6O1f+evqmtvVDH3eqSA6PGPTUW9DfwV/BMlr1m7nXj4XAqL6Vv1mljcvrhZVYMGqrbOmQXav4KsJQQHSa7kVHnCVNIw5JZeqVLwUn6Ae5s4OGkgQbTx`)
+
+> **Không cần nhập MANAGER_API_SECRET** — partner.vietbot.vn nginx tự inject server-side. Nếu có popup hỏi secret → đó là bản cũ, hãy refresh (Ctrl+Shift+R).
+
+### Bước 5: Cấu hình widget
 
 Tải `widget.js` về:
 
@@ -91,14 +135,14 @@ const SITE_WS_ENDPOINT = '__SITE_WS_ENDPOINT__';
 Thay `__SITE_WS_ENDPOINT__` bằng token bạn vừa copy:
 
 ```javascript
-const SITE_WS_ENDPOINT = 'h7sDRjDHWLuxO9HOFH0wulRVsaRdHeH865Uy13UJ9FFL/r/eBojzxlKMIUgV+6Cl';
+const SITE_WS_ENDPOINT = 'bUEx04bA8jmGT6O1f+evqmtvVDH3eqSA6PGPTUW9DfwV/BMlr1m7nXj4XAqL6Vv1mljcvrhZVYMGqrbOmQXav4KsJQQHSa7kVHnCVNIw5JZeqVLwUn6Ae5s4OGkgQbTx';
 ```
 
 **⚠️ Lưu ý:**
 - Token có thể chứa ký tự `+`, `/`, `=` — đây là ký tự hợp lệ của base64, **không cần encode** khi paste.
 - KHÔNG commit file widget.js đã có token lên Git public — token泄露 cho phép người khác dùng bot của bạn.
 
-### Bước 3: Upload widget.js lên hosting
+### Bước 6: Upload widget.js lên hosting
 
 Upload file `widget.js` đã sửa lên web server của bạn:
 
@@ -106,30 +150,10 @@ Upload file `widget.js` đã sửa lên web server của bạn:
 # Ví dụ với nginx
 scp widget.js user@server:/var/www/html/js/widget.js
 
-# Hoặc dùng bất kỳ CDN nào (Cloudflare, jsDelivr tự host, etc.)
+# Hoặc dùng bất kỳ CDN nào (Cloudflare, jsDelivr self-host, etc.)
 ```
 
-### Bước 4: Set domain whitelist (KHUYẾN NGHỊ)
-
-Gọi API để set whitelist domain:
-
-```bash
-curl -X POST https://live.vietbot.vn/api/agent/{agent_id}/site-domains \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"domains": ["example.com", "www.example.com", "*.example.com"]}'
-```
-
-**Hỗ trợ wildcard:**
-| Pattern | Match |
-|---------|-------|
-| `"example.com"` | Chỉ `example.com` |
-| `"*.example.com"` | `example.com`, `sub.example.com`, `a.b.example.com` |
-| `"*"` | Mọi domain (KHÔNG AN TOÀN) |
-
-Nếu **không set whitelist**, bot sẽ chạy ở mọi domain — bất kỳ ai có token cũng có thể dùng.
-
-### Bước 5: Nhúng widget vào HTML
+### Bước 7: Nhúng widget vào HTML
 
 Thêm vào cuối `<body>` trang web của bạn:
 
@@ -141,9 +165,9 @@ Thêm vào cuối `<body>` trang web của bạn:
 </head>
 <body>
     <h1>Welcome to my site</h1>
-    
+
     <!-- ... nội dung trang ... -->
-    
+
     <!-- ⬇️ VietBot widget — đặt cuối body -->
     <script src="/js/widget.js"></script>
 </body>
@@ -158,7 +182,7 @@ Xong! Floating button màu xanh sẽ xuất hiện ở góc dưới bên phải.
 
 ### Tại sao cần domain whitelist?
 
-Nếu admin paste token `widget.js` lên GitHub public hoặc attacker đánh cắp token qua DevTools, attacker có thể nhúng token vào website của họ để dùng bot "free". Domain whitelist giúp giới hạn bot chỉ chạy trên domain admin đã đăng ký.
+Nếu admin paste token trong `widget.js` lên GitHub public hoặc attacker đánh cắp token qua DevTools, attacker có thể nhúng token vào website của họ để dùng bot "free". Domain whitelist giúp giới hạn bot chỉ chạy trên domain admin đã đăng ký.
 
 **Kịch bản tấn công:**
 1. Admin nhúng widget lên `myshop.com`
@@ -167,13 +191,28 @@ Nếu admin paste token `widget.js` lên GitHub public hoặc attacker đánh c�
 4. Nếu KHÔNG có whitelist → bot vẫn hoạt động trên `attacker.com` ❌
 5. Nếu CÓ whitelist `["myshop.com"]` → request từ `attacker.com` bị server từ chối (HTTP 403) ✅
 
+### Cơ chế bảo vệ
+
+**Token tự chứa MAC + whitelist** — không cần lưu DB:
+- Token = `Base64(AES-ECB(key, JSON{mac_address, whitelist}))`
+- Khi visitor kết nối: server decrypt token → lấy MAC + whitelist ngay lập tức
+- Check `Origin` header của visitor vs whitelist từ token
+- Không match → 1008 WebSocket close code "domain_not_allowed"
+- **Không thể sửa token:** AES-ECB + secret key chỉ VietBot backend biết
+
+**Không cần MANAGER_API_SECRET ở frontend:**
+- Token generation endpoint `/admin/site-token/generate` được nginx forward từ partner.vietbot.vn
+- Nginx tự inject `Authorization: Bearer ${MANAGER_API_SECRET}` vào request upstream
+- Frontend chỉ cần POST không có header → backend verify OK
+- Hạn chế CORS: chỉ cho phép `Origin: https://partner.vietbot.vn`
+
 ### Check list bảo mật
 
-- [ ] Đã set domain whitelist qua API
+- [ ] Đã nhập whitelist domain tại partner.vietbot.vn
 - [ ] Token không bị commit lên Git public
 - [ ] Website serve qua HTTPS
-- [ ] Token được rotate định kỳ (qua MCP Access Point UI)
-- [ ] Log truy cập tại [web.vietbot.vn](https://web.vietbot.vn) được monitor thường xuyên
+- [ ] Token được rotate định kỳ (re-bind thiết bị → generate token mới)
+- [ ] Log truy cập được monitor thường xuyên
 
 ---
 
@@ -223,19 +262,20 @@ const CONFIG = {
 
 Serve qua HTTPS, mở browser. Phải thấy floating button màu xanh ở góc dưới phải.
 
-### Test 2: WebSocket connect
+### Test 2: WebSocket connect + bot chạy đúng role
 
 1. Click button → iframe mở
 2. Mở DevTools → Console
-3. Phải thấy log "WebSocket connected" hoặc "Bot ready"
-4. Click microphone → nói thử → bot phản hồi
+3. Phải thấy log "WebSocket connected" → "Bot ready"
+4. Click microphone → nói thử → bot phản hồi **đúng role đã bind** ở Bước 3
+5. Nếu bot trả lời sai role / persona → re-check Bước 3 (thiết bị đã bind đúng agent chưa)
 
 ### Test 3: Domain whitelist hoạt động
 
 Trên domain KHÔNG có trong whitelist (ví dụ `localhost:8000` nếu whitelist chỉ có `myshop.com`):
 
 ```bash
-curl -i https://live.vietbot.vn/ws?site-endpoint=YOUR_TOKEN \
+curl -i "https://live.vietbot.vn/ws?site-endpoint=YOUR_TOKEN" \
      -H "Origin: http://evil.com" \
      -H "Upgrade: websocket" \
      -H "Connection: Upgrade" \
@@ -243,7 +283,10 @@ curl -i https://live.vietbot.vn/ws?site-endpoint=YOUR_TOKEN \
      -H "Sec-WebSocket-Version: 13"
 ```
 
-**Expected:** `HTTP/1.1 403 Forbidden`
+**Expected:** `HTTP/1.1 101 Switching Protocols` rồi server close với code `1008` ngay sau đó (hoặc close trước khi accept). Check log:
+```bash
+journalctl -u vietbot-live-voice -f | grep "domain_not_allowed"
+```
 
 ---
 
@@ -254,18 +297,29 @@ curl -i https://live.vietbot.vn/ws?site-endpoint=YOUR_TOKEN \
 | Button không xuất hiện | Script load lỗi | Mở Console → check 404/CORS |
 | Console: `SITE_WS_ENDPOINT chưa được cấu hình` | Chưa paste token | Mở widget.js → paste token |
 | Iframe mở nhưng trắng | HTTPS chưa bật | Bắt buộc serve qua HTTPS để dùng mic |
-| Iframe mở → 403 Forbidden | Domain không trong whitelist | Set whitelist qua API |
+| Iframe mở → 1008 close `agent_not_found` | MAC address không bind | Quay lại Bước 3, bind thiết bị với agent tại web.vietbot.vn |
+| Iframe mở → 1008 close `domain_not_allowed` | Domain không trong whitelist | Generate token mới với whitelist đúng tại partner.vietbot.vn |
+| **Bot trả lời sai role** (ví dụ: "my sói" thay vì "em gái miền tây") | MAC address trỏ tới device khác, hoặc device đã bind nhầm agent | Check device binding ở web.vietbot.vn, đảm bảo MAC đúng thiết bị đã bind với agent mong muốn |
 | Mic không hoạt động | User từ chối permission | Click icon mic trên browser → allow |
-| Bot không phản hồi | Token hết hạn / agent bị xóa | Generate token mới từ MCP Access Point |
+| Bot không phản hồi | Token hết hạn / agent bị xóa | Bind lại thiết bị → generate token mới từ partner.vietbot.vn |
 | `Mixed content` warning | Widget HTTP, page HTTPS | Đảm bảo `widget.js` cũng serve qua HTTPS |
 
 ### Debug mode
 
 Mở DevTools → Console, kiểm tra log:
 
-```javascript
-// Server side logs (qua WebSocket frame)
-// Tại server: tail -f /var/log/vietbot-live-voice.log | grep "Site-bound"
+```bash
+# Server side logs
+journalctl -u vietbot-live-voice -f | grep -E "Site-bound|get_private_config"
+```
+
+Log mẫu flow thành công:
+```
+🌐 Site-bound WS from 1.2.3.4 → mac=00:1a:2b:3c:4d:5e, whitelist=['myshop.com']
+✅ Domain myshop.com matches whitelist ['myshop.com']
+🚀 Site-bound pipeline: agent=f2606e84... user=2087350989158060034
+📝 Using prompt from Manager API (7149 chars)
+🎙️ Bot config - Voice: Nữ gender=female, Language: vi-VN
 ```
 
 ---
@@ -273,21 +327,29 @@ Mở DevTools → Console, kiểm tra log:
 ## Kiến trúc
 
 ```
-┌──────────────────────────────┐
-│  3rd-party website           │
-│  ┌──────────────────────┐   │
-│  │ <script> widget.js   │   │
-│  │ → floating button    │   │
-│  │ → iframe (380×560)   │   │
-│  └──────────────────────┘   │
-└──────────────┬───────────────┘
+┌──────────────────────────────────────┐
+│  3rd-party website (HTTPS)            │
+│  ┌──────────────────────────────┐    │
+│  │ <script> widget.js            │    │
+│  │ → floating button + iframe    │    │
+│  │ → iframe load ?site-endpoint= │    │
+│  └──────────────────────────────┘    │
+└──────────────┬───────────────────────┘
                │ HTTPS
                ▼
 ┌──────────────────────────────────────┐
+│ partner.vietbot.vn (nginx)           │
+│  ├─ / (static SPA)                    │
+│  └─ /admin/site-token/generate → proxy│
+│     inject Bearer MANAGER_API_SECRET  │
+└──────────────┬───────────────────────┘
+               │ HTTPS (w/ auth header)
+               ▼
+┌──────────────────────────────────────┐
 │ live.vietbot.vn (nginx)              │
-│  ├─ /embeddable_bot.html             │
-│  ├─ /api/agent/{id}/site-domains     │
-│  └─ /ws (WebSocket Pipecat)          │
+│  ├─ / (mobile frontend)              │
+│  ├─ /admin/site-token/generate → 7860│
+│  └─ /ws (WebSocket Pipecat → 7861)   │
 └──────────────┬───────────────────────┘
                │
        ┌───────┴────────┐
@@ -296,57 +358,82 @@ Mở DevTools → Console, kiểm tra log:
 │  vietbot_api│  │ vietbot_server   │
 │  (port 7860)│  │ (port 7861)      │
 │             │  │                  │
-│ SQLite:     │  │ Pipecat pipeline:│
-│ - agents    │  │ - AES decrypt    │
-│ - whitelist │  │ - Origin check   │
-│ - configs   │  │ - Gemini Live    │
-└─────────────┘  └──────────────────┘
+│ /admin/...  │  │ WS site-bound:   │
+│ AES-ECB     │  │ - decrypt token  │
+│ token gen   │  │ - check Origin   │
+│ (SQLite +   │  │ - call /config/  │
+│  Redis)     │  │   agent-models   │
+│             │  │ - run Pipecat    │
+└─────────────┘  └──────┬───────────┘
+                        │ Bearer MANAGER_API_SECRET
+                        ▼
+                ┌──────────────────┐
+                │ vietbot-manager-api│
+                │ (port 8002, Java) │
+                │ /config/agent-    │
+                │  models → returns │
+                │ full agent config │
+                └──────────────────┘
 ```
 
-**Flow chi tiết:**
+### Flow chi tiết (server-side)
 
 1. **Widget load** → inject iframe với `?site-endpoint={token}`
 2. **Iframe load embeddable_bot.html** → JS chạy Pipecat client
 3. **Pipecat mở WebSocket** tới `wss://live.vietbot.vn/ws?site-endpoint={token}&client-id={uuid}`
 4. **vietbot_server nhận WS request:**
-   - Decrypt AES-ECB token → `agent_id`
+   - Decrypt AES-ECB token → `mac_address` + `whitelist` (no DB lookup!)
    - Lấy `Origin` header từ request
-   - Query SQLite (qua vietbot_api) → `site_allowed_domains` của agent
-   - Check `Origin` có match whitelist không
-   - Nếu OK → accept WS, load agent config, start Pipecat pipeline
-   - Nếu FAIL → close với code 1008 "domain_not_allowed"
+   - Check `Origin` có match whitelist từ token không
+   - Nếu FAIL → close code 1008 `domain_not_allowed`
+   - Nếu OK → accept WS, call `manager.get_private_config_by_mac(mac_address)`
+     - Manager client gọi `POST /config/agent-models` với Bearer `MANAGER_API_SECRET`
+     - Java Manager API lookup device by MAC → lookup agent → return full config
+     - Bao gồm: `agent_id`, `assistant` (agent_name), `prompt`, `bot_language`, `bot_gender`, `google_api_key`, `mcp_endpoint`, `plugins`, `voiceprint`, …
+   - Build `user_data` từ config + start Pipecat pipeline (Gemini Live)
+5. **Visitor nói** → Gemini Live → response → TTS → bot trả lời bằng voice + text
+
+### Token format (self-contained)
+
+```json
+{
+  "mac_address": "00:1a:2b:3c:4d:5e",
+  "whitelist": ["myshop.com", "*.myshop.com"]
+}
+```
+
+`Base64(AES-ECB(key, payload))` — key chỉ VietBot backend biết (`MCP_ENDPOINT_KEY` trong `/opt/vietbot.vn/live/vietbot_api/auth/.env`).
 
 ---
 
 ## API Reference
 
-### Set domain whitelist
+### Token generation endpoint (internal)
 
 ```
-POST /api/agent/{agent_id}/site-domains
-Authorization: Bearer {JWT_TOKEN}
+POST /admin/site-token/generate          (nginx forward từ partner.vietbot.vn)
+Authorization: Bearer ${MANAGER_API_SECRET}   (nginx tự inject)
 Content-Type: application/json
 
 {
-  "domains": ["example.com", "*.example.com"]
+  "mac_address": "00:1A:2B:3C:4D:5E",
+  "whitelist": ["example.com", "*.example.com"]
 }
 ```
 
-**Response:**
+**Response 200:**
 ```json
 {
   "success": true,
-  "agent_id": "0052d168...",
-  "site_allowed_domains": ["example.com", "*.example.com"]
+  "token": "bUEx04bA8jmGT6O1f+evqmtvVDH3eqSA6PGPTUW9DfwV/BMlr1m7nXj4XAqL6Vv1mljcvrhZVYMGqrbOmQXav4KsJQQHSa7kVHnCVNIw5JZeqVLwUn6Ae5s4OGkgQbTx",
+  "mac_address": "00:1a:2b:3c:4d:5e",
+  "whitelist": ["example.com", "*.example.com"]
 }
 ```
 
-### Get domain whitelist
-
-```
-GET /api/agent/{agent_id}/site-domains
-Authorization: Bearer {JWT_TOKEN}
-```
+**Errors:**
+- `400` — `mac_address is required` / `Invalid MAC address format`
+- `401` — Missing or invalid Bearer (do nginx handle, không lộ từ frontend)
 
 ### Validate domain pattern
 
@@ -357,6 +444,22 @@ Server chấp nhận các pattern sau:
 | `"example.com"` | Exact match | `example.com` ✅, `www.example.com` ❌ |
 | `"*.example.com"` | Wildcard subdomain | `example.com` ✅, `sub.example.com` ✅, `evil.com` ❌ |
 | `"*"` | Allow all | Mọi origin ⚠️ |
+
+### Backend: query agent config by MAC (server-to-server)
+
+```
+POST http://127.0.0.1:8002/api/config/agent-models
+Authorization: Bearer ${server.secret}
+Content-Type: application/json
+
+{
+  "macAddress": "00:1A:2B:3C:4D:5E",
+  "clientId": "site_visitor",
+  "selectedModule": {}
+}
+```
+
+Returns full agent config: `agent_id`, `assistant`, `prompt`, `bot_language`, `bot_gender`, `google_api_key`, `mcp_endpoint`, `plugins`, `voiceprint`, `user_id`, `bot_mode`, etc.
 
 ---
 
@@ -375,9 +478,11 @@ Server chấp nhận các pattern sau:
 |-----------|----------------|---------------------|
 | Visitor cần đăng ký? | ✅ Có (bind device) | ❌ Không |
 | Visitor thấy bind modal? | ✅ Có | ❌ Không |
-| Domain whitelist? | ❌ Không | ✅ Có (khuyến nghị) |
+| Domain whitelist? | ❌ Không | ✅ Có (trong token) |
 | Use case | Khách hàng VietBot | 3rd-party embed |
 | Bot dùng config của | Visitor | Admin |
+| Token storage | SQLite (MD5) | AES-ECB self-contained |
+| Lookup mechanism | Device MAC per user | MAC bound to agent (admin-owned) |
 
 ---
 
