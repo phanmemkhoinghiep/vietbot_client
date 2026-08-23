@@ -48,6 +48,7 @@
         width: EXTERNAL_CONFIG.width || '380px',
         height: EXTERNAL_CONFIG.height || '560px',
         position: EXTERNAL_CONFIG.position || 'bottom-right',
+        bottom: EXTERNAL_CONFIG.bottom || '80px',  // Nâng cao hơn mặc định 80px (thay vì 20px)
     };
 
     if (document.getElementById('vietbot-widget-container')) return;
@@ -58,7 +59,7 @@
     Object.assign(container.style, {
         position: 'fixed',
         zIndex: '999999',
-        bottom: '20px',
+        bottom: CONFIG.bottom,
         right: CONFIG.position === 'bottom-left' ? 'auto' : '20px',
         left: CONFIG.position === 'bottom-left' ? '20px' : 'auto',
         fontFamily: 'sans-serif',
