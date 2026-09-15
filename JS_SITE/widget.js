@@ -102,12 +102,12 @@
     // Launcher button
     const button = document.createElement('button');
     Object.assign(button.style, {
-        width: '60px',
-        height: '60px',
+        width: '44px',
+        height: '44px',
         borderRadius: '50%',
-        backgroundColor: '#1f6feb',
+        backgroundColor: '#0d9488',
         border: 'none',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
         cursor: 'pointer',
         display: 'flex',
         alignItems: 'center',
@@ -117,7 +117,7 @@
     });
     button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
     const svg = button.querySelector('svg');
-    if (svg) { svg.style.width = '30px'; svg.style.height = '30px'; }
+    if (svg) { svg.style.width = '22px'; svg.style.height = '22px'; }
 
     // Toggle logic
     let isOpen = false;
@@ -135,7 +135,7 @@
             setTimeout(() => { iframeContainer.style.display = 'none'; }, 300);
             button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
             const s = button.querySelector('svg');
-            if (s) { s.style.width = '30px'; s.style.height = '30px'; }
+            if (s) { s.style.width = '22px'; s.style.height = '22px'; }
         }
     });
 
