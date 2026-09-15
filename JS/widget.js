@@ -74,13 +74,13 @@
     iframe.setAttribute('loading', 'lazy');
     iframeContainer.appendChild(iframe);
 
-    // ---- Launcher button ----
+    // ---- Launcher button: 44px khi đóng (CTA), 32px khi mở (close gọn) ----
     const button = document.createElement('button');
     Object.assign(button.style, {
         width: '44px',
         height: '44px',
         borderRadius: '50%',
-        backgroundColor: options.buttonColor || '#0d9488',
+        backgroundColor: '#0d9488',
         border: 'none',
         boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
         cursor: 'pointer',
@@ -88,7 +88,7 @@
         alignItems: 'center',
         justifyContent: 'center',
         color: 'white',
-        transition: 'transform 0.2s, background-color 0.2s'
+        transition: 'width 0.2s, height 0.2s, transform 0.2s, background-color 0.2s'
     });
     button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
 
@@ -108,13 +108,24 @@
             iframeContainer.offsetHeight; // trigger reflow
             iframeContainer.style.opacity = '1';
             iframeContainer.style.transform = 'translateY(0)';
-            button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+            // Co nhỏ button khi chat đang mở — close button gọn
+            button.style.width = '32px';
+            button.style.height = '32px';
+            button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+            const xSvg = button.querySelector('svg');
+            if (xSvg) {
+                xSvg.style.width = '14px';
+                xSvg.style.height = '14px';
+            }
         } else {
             iframeContainer.style.opacity = '0';
             iframeContainer.style.transform = 'translateY(20px)';
             setTimeout(() => {
                 iframeContainer.style.display = 'none';
             }, 300);
+            // Phóng to lại khi đóng — CTA dễ thấy
+            button.style.width = '44px';
+            button.style.height = '44px';
             button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
             const svg = button.querySelector('svg');
             if (svg) {
