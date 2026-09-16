@@ -230,6 +230,15 @@ const CONFIG = {
 };
 ```
 
+**Launcher button** — tự động co giãn để không che chat window:
+
+| Trạng thái | Kích thước | Icon |
+|------------|-----------|------|
+| Đóng (CTA) | 44px | Chat bubble, 22px |
+| Mở (nút đóng) | 32px | X, 14px |
+
+Mở chat → button co thành nút ✕ gọn; đóng chat → phóng lại thành CTA đầy. Màu mặc định: teal `#0d9488`.
+
 **Tùy chỉnh nâng cao** — thêm CSS cho `#vietbot-widget-container`:
 
 ```html

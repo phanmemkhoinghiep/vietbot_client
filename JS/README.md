@@ -72,7 +72,18 @@ Configure the widget before loading by setting `window.VIETBOT_WIDGET_CONFIG`:
 <script src="https://cdn.jsdelivr.net/gh/phanmemkhoinghiep/vietbot_client@main/JS/widget.js"></script>
 ```
 
-**Note:** `buttonColor` is no longer listed — the button color is currently fixed to blue (`#1f6feb`). Color customization may be added in a future update.
+**Note:** `buttonColor` is no longer listed — the button color is fixed to teal (`#0d9488`). Color customization may be added in a future update.
+
+### Launcher button behavior
+
+The floating button dynamically resizes so it never competes with the chat window:
+
+| State | Size | Icon |
+|-------|------|------|
+| Closed (CTA) | 44px | Chat bubble, 22px |
+| Open (close button) | 32px | X, 14px |
+
+When you open the chat, the button shrinks to a compact ✕ close button; when you close the chat, it expands back to the full chat-bubble CTA.
 
 ---
 
