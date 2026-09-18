@@ -50,7 +50,9 @@
         height: options.height,
         maxHeight: '80vh',
         maxWidth: '90vw',
-        backgroundColor: '#0d1117',
+        backgroundColor: 'rgba(13,17,23,0.55)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         borderRadius: '12px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
         overflow: 'hidden',
@@ -68,7 +70,8 @@
     Object.assign(iframe.style, {
         width: '100%',
         height: '100%',
-        border: 'none'
+        border: 'none',
+        backgroundColor: 'transparent'
     });
     iframe.setAttribute('allow', 'microphone; camera; autoplay; clipboard-write; encrypted-media');
     iframe.setAttribute('loading', 'lazy');
