@@ -176,6 +176,24 @@ Thêm vào cuối `<body>` trang web của bạn:
 
 Xong! Floating button màu xanh sẽ xuất hiện ở góc dưới bên phải.
 
+### Bước 7b (tùy chọn): Cấu hình màu theo site
+
+Đặt **trước** thẻ `<script src=".../widget.js">` (đây là cách duy nhất để đổi màu — không cần sửa widget.js):
+
+```html
+<script>
+  window.VIETBOT_SITE_CONFIG = {
+    bubbleColor: '#203d6f',        // màu bong bóng chat (default: #0d9488)
+    startButtonColor: '#203d6f'    // nút “Bắt đầu” + waveform trong iframe
+  };
+</script>
+<script src="/js/widget.js"></script>
+```
+
+- `startButtonColor` nhận hex (`#rrggbb`, `#rgb`, `#rrggbbaa`) hoặc `rgb()/rgba()`.
+- Bỏ trống → nút Bắt đầu dùng màu **slate trung tính `#334155`**; nút **Dừng luôn đỏ**.
+- Màu sai định dạng tự động bị bỏ qua (rơi về slate trung tính).
+
 ---
 
 ## Bảo mật
@@ -218,7 +236,11 @@ Nếu admin paste token trong `widget.js` lên GitHub public hoặc attacker đ�
 
 ## Tùy chỉnh
 
-Mặc định widget hiển thị ở góc dưới bên phải với kích thước 380×560px. Để tùy chỉnh, sửa trực tiếp trong file `widget.js`:
+Mặc định widget hiển thị ở góc dưới bên phải với kích thước 380×560px.
+
+**Màu** — cấu hình qua `window.VIETBOT_SITE_CONFIG` đặt trước script widget (xem Bước 7b): `bubbleColor` cho bong bóng, `startButtonColor` cho nút “Bắt đầu” + waveform trong iframe. Bỏ trống `startButtonColor` → slate trung tính `#334155`; nút Dừng luôn đỏ.
+
+**Kích thước/vị trí** — sửa trực tiếp trong file `widget.js`:
 
 ```javascript
 const CONFIG = {

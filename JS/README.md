@@ -64,15 +64,17 @@ Configure the widget before loading by setting `window.VIETBOT_WIDGET_CONFIG`:
 ```html
 <script>
   window.VIETBOT_WIDGET_CONFIG = {
-    position: 'bottom-left',   // 'bottom-right' (default) | 'bottom-left'
-    width: '400px',            // iframe width (default: 380px)
-    height: '600px'            // iframe height (default: 560px)
+    position: 'bottom-left',        // 'bottom-right' (default) | 'bottom-left'
+    width: '400px',                 // iframe width (default: 380px)
+    height: '600px',                // iframe height (default: 560px)
+    buttonColor: '#203d6f',         // bubble color (default: #0d9488)
+    startButtonColor: '#203d6f'     // iframe “Bắt đầu” button; omit for neutral slate
   };
 </script>
 <script src="https://cdn.jsdelivr.net/gh/phanmemkhoinghiep/vietbot_client@main/JS/widget.js"></script>
 ```
 
-**Note:** `buttonColor` is no longer listed — the button color is fixed to teal (`#0d9488`). Color customization may be added in a future update.
+`buttonColor` chỉ đổi màu bubble. `startButtonColor` đổi nút “Bắt đầu” và waveform trong iframe. Khi bỏ trống, nút bắt đầu dùng màu slate trung tính `#334155`; nút Dừng vẫn đỏ.
 
 ### Launcher button behavior
 

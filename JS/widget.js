@@ -16,7 +16,8 @@
     const CONFIG = window.VIETBOT_WIDGET_CONFIG || {};
     const defaultOptions = {
         botUrl: 'https://live.vietbot.vn/embeddable_bot.html',
-        buttonColor: '#64FFDA',
+        buttonColor: '#0d9488',      // màu bubble; đổi qua window.VIETBOT_WIDGET_CONFIG.buttonColor
+        startButtonColor: '',        // màu nút Bắt đầu trong iframe; rỗng → slate trung tính mặc định
         width: '380px',
         height: '560px',
         position: 'bottom-right' // bottom-right, bottom-left
@@ -66,7 +67,11 @@
 
     // ---- Create iframe ----
     const iframe = document.createElement('iframe');
-    iframe.src = options.botUrl;
+    const iframeUrl = new URL(options.botUrl, window.location.href);
+    if (options.startButtonColor) {
+        iframeUrl.searchParams.set('start-color', options.startButtonColor);
+    }
+    iframe.src = iframeUrl.toString();
     Object.assign(iframe.style, {
         width: '100%',
         height: '100%',
@@ -83,7 +88,7 @@
         width: '44px',
         height: '44px',
         borderRadius: '50%',
-        backgroundColor: '#0d9488',
+        backgroundColor: options.buttonColor,
         border: 'none',
         boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
         cursor: 'pointer',

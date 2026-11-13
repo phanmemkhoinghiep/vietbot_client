@@ -49,6 +49,10 @@
         height: EXTERNAL_CONFIG.height || '560px',
         position: EXTERNAL_CONFIG.position || 'bottom-right',
         bottom: EXTERNAL_CONFIG.bottom || '80px',  // Nâng cao hơn mặc định 80px (thay vì 20px)
+        // Màu tùy biến theo site: window.VIETBOT_SITE_CONFIG.bubbleColor / startButtonColor.
+        // Không set startButtonColor → bot dùng màu trung tính mặc định (#334155).
+        bubbleColor: EXTERNAL_CONFIG.bubbleColor || '#0d9488',
+        startButtonColor: EXTERNAL_CONFIG.startButtonColor || '',
     };
 
     if (document.getElementById('vietbot-widget-container')) return;
@@ -91,7 +95,8 @@
 
     // Iframe — gắn site-endpoint vào query string
     const iframe = document.createElement('iframe');
-    iframe.src = CONFIG.botUrl + '?site-endpoint=' + encodeURIComponent(CONFIG.siteEndpoint);
+    iframe.src = CONFIG.botUrl + '?site-endpoint=' + encodeURIComponent(CONFIG.siteEndpoint)
+        + (CONFIG.startButtonColor ? '&start-color=' + encodeURIComponent(CONFIG.startButtonColor) : '');
     iframe.setAttribute('allow', 'microphone; camera; autoplay; clipboard-write; encrypted-media');
     iframe.setAttribute('loading', 'lazy');
     Object.assign(iframe.style, {
@@ -108,7 +113,7 @@
         width: '44px',
         height: '44px',
         borderRadius: '50%',
-        backgroundColor: '#0d9488',
+        backgroundColor: CONFIG.bubbleColor,
         border: 'none',
         boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
         cursor: 'pointer',
