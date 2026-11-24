@@ -503,6 +503,17 @@ Returns full agent config: `agent_id`, `assistant`, `prompt`, `bot_language`, `b
 
 ---
 
+## Audio codec (Opus — tự động, 2026-11-24)
+
+`widget.js` **không chứa code audio** — toàn bộ voice chạy bên trong iframe do
+`live.vietbot.vn` phục vụ. Traffic voice dùng codec **Opus** (~16 kbps lên /
+24 kbps xuống, thay vì PCM thô 256 kbps), negotiate tự động theo từng session:
+client xin `codec=opus` qua `/connect`; nếu server hoặc runtime libopus không
+sẵn sàng → client tự fallback PCM. **Khách hàng 3rd-party không cần làm gì** —
+embed luôn dùng bản client mới nhất trên live.vietbot.vn.
+
+---
+
 ## So sánh với JS/widget.js
 
 | Tính năng | `JS/widget.js` | `JS_SITE/widget.js` |

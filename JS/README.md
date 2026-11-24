@@ -55,6 +55,16 @@ Then include from your server:
 7. Once bound, the user can talk to the bot
 ```
 
+### Audio codec (Opus — automatic, 2026-11-24)
+
+The widget loader contains **no audio code** — audio runs entirely inside the
+iframe served by live.vietbot.vn. Voice traffic uses the **Opus** codec
+(~16 kbps up / 24 kbps down instead of raw PCM 256 kbps), negotiated per
+session: the client asks for `codec=opus` via `/connect`; if the server or the
+libopus runtime is unavailable, the client automatically falls back to PCM.
+**3rd-party integrators need to do nothing** — embeds always get the latest
+client from live.vietbot.vn.
+
 ---
 
 ## Customization (Optional)
