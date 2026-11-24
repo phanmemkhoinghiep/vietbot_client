@@ -19,6 +19,8 @@ A floating chat button appears at the bottom-right of the page. Click to open th
 - Your site must be served over HTTPS (required for microphone access)
 - Users must register an agent + bind a device at [web.vietbot.vn](https://web.vietbot.vn) or [mobile.vietbot.vn](https://mobile.vietbot.vn) before the widget activates
 
+**Also available:** `https://live.vietbot.vn/widget.js` — same file, deployed on our own CDN (synced from this repo, 2026-11-24).
+
 ---
 
 ## Quick Start (Local Download — Self-hosted)
